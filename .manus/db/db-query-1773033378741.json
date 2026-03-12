@@ -1,0 +1,19 @@
+{
+  "query": "SELECT COUNT(*) as total_html FROM categories WHERE nameEs LIKE '%<%' OR nameEn LIKE '%<%';\nSELECT COUNT(*) as total_html FROM menu_items WHERE nameEs LIKE '%<%' OR nameEn LIKE '%<%' OR descriptionEs LIKE '%<%' OR descriptionEn LIKE '%<%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 39YPv2ppfwHpYEt.9d4122669425 --database M5GhaQWP8oLQTBVp3qvgev --execute SELECT COUNT(*) as total_html FROM categories WHERE nameEs LIKE '%<%' OR nameEn LIKE '%<%';\nSELECT COUNT(*) as total_html FROM menu_items WHERE nameEs LIKE '%<%' OR nameEn LIKE '%<%' OR descriptionEs LIKE '%<%' OR descriptionEn LIKE '%<%';",
+  "rows": [
+    {
+      "total_html": "0"
+    },
+    {
+      "total_html": "total_html"
+    },
+    {
+      "total_html": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_html\n0\ntotal_html\n0\n",
+  "stderr": "",
+  "execution_time_ms": 65
+}
