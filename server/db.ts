@@ -82,8 +82,10 @@ export async function getUserByOpenId(openId: string) {
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];
-  const allUsers = await db.select().from(users).orderBy(asc(users.name));
-  // For each user, fetch their companies
+  // Só retorna usuários ativos (exclui pending e rejected)
+  const allUsers = await db.select().from(users)
+    .where(eq((users as any).status, "active"))
+    .orderBy(asc(users.name));
   const usersWithCompanies = await Promise.all(
     allUsers.map(async (u) => {
       const memberships = await db!

@@ -45,7 +45,7 @@ import {
   updateMenuItem,
   updateUserRole,
 } from "./db";
-import { sendPasswordResetEmail, sendWelcomeEmail } from "./_core/email";
+import { sendPasswordResetEmail, sendWelcomeEmail, sendApprovalEmail } from "./_core/email";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -401,6 +401,15 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await updateUserStatus(input.id, "active");
+        // Enviar e-mail de aprovação
+        try {
+          const user = await getUserById(input.id);
+          if (user?.email) {
+            await sendApprovalEmail({ to: user.email, name: user.name ?? "Usuário" });
+          }
+        } catch (err) {
+          console.warn("[Approval email] Failed:", err);
+        }
         return { success: true };
       }),
 

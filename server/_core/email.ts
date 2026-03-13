@@ -93,3 +93,31 @@ export async function sendWelcomeEmail({
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
 }
+
+export async function sendApprovalEmail({ to, name }: { to: string; name: string }) {
+  const { error } = await getResend().emails.send({
+    from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    to,
+    subject: "Sua conta foi aprovada — Larf Menu",
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #fff;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <span style="font-size: 24px; font-weight: 700; color: #c0392b;">Larf Menu</span>
+        </div>
+        <h2 style="font-size: 20px; font-weight: 600; color: #111; margin-bottom: 8px;">Conta aprovada! 🎉</h2>
+        <p style="color: #555; line-height: 1.6; margin-bottom: 24px;">
+          Olá, <strong>${name}</strong>! Sua solicitação de acesso foi aprovada.
+          Você já pode entrar no painel do Larf Menu com seu e-mail e senha.
+        </p>
+        <div style="text-align: center; margin-bottom: 32px;">
+          <a href="https://larfmenu.com.br/login" style="display: inline-block; background: #c0392b; color: #fff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+            Acessar o painel
+          </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #bbb; font-size: 12px; text-align: center;">Larf Menu — Cardápio Digital para Restaurantes</p>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+}
