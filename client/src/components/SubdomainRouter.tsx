@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -47,7 +46,6 @@ interface SubdomainRedirectProps {
 }
 
 function SubdomainRedirect({ subdomain }: SubdomainRedirectProps) {
-  const [, setLocation] = useLocation();
   const { data: company, isLoading } = trpc.companies.getBySubdomain.useQuery(
     { subdomain },
     { enabled: !!subdomain }
@@ -55,10 +53,10 @@ function SubdomainRedirect({ subdomain }: SubdomainRedirectProps) {
 
   useEffect(() => {
     if (!isLoading && company?.slug) {
-      // Redirecionar para o cardápio da empresa encontrada
-      setLocation(`/menu/${company.slug}`);
+      // Redireciona para larfmenu.com.br/menu/slug para sair do contexto de subdomínio
+      window.location.replace(`https://larfmenu.com.br/menu/${company.slug}`);
     }
-  }, [company, isLoading, setLocation]);
+  }, [company, isLoading]);
 
   if (isLoading) {
     return (

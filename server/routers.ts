@@ -145,6 +145,34 @@ async function translateViaLingva(text: string, targetLang: string): Promise<str
   return stripHtml(data.translation);
 }
 
+async function translateViaGoogle2(text: string, targetLang: string): Promise<string> {
+  // Segundo endpoint do Google Translate (client=dict-chrome-ex)
+  const encoded = encodeURIComponent(text);
+  const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=pt&tl=${targetLang}&dt=t&q=${encoded}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`Google2 HTTP ${res.status}`);
+  const rawText = await res.text();
+  if (rawText.trimStart().startsWith("<")) throw new Error("Google2: blocked");
+  const data = JSON.parse(rawText);
+  const translated = (data[0] as any[][]).map((c: any[]) => c[0] ?? "").join("");
+  if (!translated) throw new Error("Google2: empty");
+  return stripHtml(translated);
+}
+
+async function translateViaArgos(text: string, targetLang: string): Promise<string> {
+  // LibreTranslate instância pública
+  const res = await fetch("https://translate.terraprint.co/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ q: text, source: "pt", target: targetLang, format: "text" }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Argos HTTP ${res.status}`);
+  const data = (await res.json()) as { translatedText?: string };
+  if (!data.translatedText) throw new Error("Argos: empty");
+  return stripHtml(data.translatedText);
+}
+
 async function translateViaLLM(text: string, targetLang: string): Promise<string> {
   const langName = targetLang === "es" ? "Spanish" : "English";
   const response = await invokeLLM({
@@ -165,10 +193,11 @@ async function translateText(text: string, targetLang: string): Promise<string> 
   if (translationCache.has(cacheKey)) return translationCache.get(cacheKey)!;
 
   const providers = [
-    { name: "Google",   fn: () => translateViaGoogle(text, targetLang) },
-    { name: "MyMemory", fn: () => translateViaMyMemory(text, targetLang) },
-    { name: "Lingva",   fn: () => translateViaLingva(text, targetLang) },
-    { name: "LLM",      fn: () => translateViaLLM(text, targetLang) },
+    { name: "Google",    fn: () => translateViaGoogle(text, targetLang) },
+    { name: "Google2",   fn: () => translateViaGoogle2(text, targetLang) },
+    { name: "MyMemory",  fn: () => translateViaMyMemory(text, targetLang) },
+    { name: "Lingva",    fn: () => translateViaLingva(text, targetLang) },
+    { name: "ArgosLingva", fn: () => translateViaArgos(text, targetLang) },
   ];
 
   let lastError: Error = new Error("All providers failed");

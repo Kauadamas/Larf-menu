@@ -142,8 +142,11 @@ export async function getCompanyBySlug(slug: string): Promise<Company | undefine
 export async function getCompanyBySubdomain(subdomain: string): Promise<Company | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(companies).where(eq(companies.customDomain, subdomain)).limit(1);
-  return result[0];
+  // Tenta primeiro por customDomain, depois por slug
+  const byDomain = await db.select().from(companies).where(eq(companies.customDomain, subdomain)).limit(1);
+  if (byDomain[0]) return byDomain[0];
+  const bySlug = await db.select().from(companies).where(eq(companies.slug, subdomain)).limit(1);
+  return bySlug[0];
 }
 
 export async function createCompany(data: InsertCompany): Promise<number> {

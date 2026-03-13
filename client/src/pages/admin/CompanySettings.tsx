@@ -202,20 +202,48 @@ export default function CompanySettings() {
     },
   });
 
+  // Redimensiona e comprime imagem antes de enviar
+  function resizeImage(file: File, maxPx: number, quality: number): Promise<{ base64: string; contentType: string; fileName: string }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let w = img.width, h = img.height;
+        if (w > maxPx || h > maxPx) {
+          if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve({
+          base64: dataUrl.split(",")[1],
+          contentType: "image/jpeg",
+          fileName: file.name.replace(/\.[^.]+$/, ".jpg"),
+        });
+      };
+      img.onerror = reject;
+      img.src = objectUrl;
+    });
+  }
+
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Logo muito grande. Máximo 2MB.");
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Logo muito grande. Máximo 5MB.");
       return;
     }
     setUploadingLogo(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadLogoMutation.mutate({ companyId, fileName: file.name, contentType: file.type, base64 });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { base64, contentType, fileName } = await resizeImage(file, 400, 0.85);
+      uploadLogoMutation.mutate({ companyId, fileName, contentType, base64 });
+    } catch {
+      toast.error("Erro ao processar imagem.");
+      setUploadingLogo(false);
+    }
   }
 
   async function handleCarouselChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -230,12 +258,13 @@ export default function CompanySettings() {
       return;
     }
     setUploadingCarousel(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadCarouselMutation.mutate({ companyId, fileName: file.name, contentType: file.type, base64 });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { base64, contentType, fileName } = await resizeImage(file, 800, 0.80);
+      uploadCarouselMutation.mutate({ companyId, fileName, contentType, base64 });
+    } catch {
+      toast.error("Erro ao processar imagem.");
+      setUploadingCarousel(false);
+    }
     e.target.value = "";
   }
 
