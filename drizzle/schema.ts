@@ -56,6 +56,9 @@ export const companies = mysqlTable("companies", {
   paymentMercadoPago: varchar("paymentMercadoPago", { length: 500 }),
   paymentPagSeguro: varchar("paymentPagSeguro", { length: 500 }),
   paymentPicPay: varchar("paymentPicPay", { length: 500 }),
+  // Exchange rates (manual override, null = use automatic API)
+  usdRate: decimal("usdRate", { precision: 10, scale: 4 }),
+  eurRate: decimal("eurRate", { precision: 10, scale: 4 }),
   // Business hours (JSON: {mon:{open:"08:00",close:"22:00",closed:false},...})
   businessHours: text("businessHours"),
   active: boolean("active").default(true).notNull(),

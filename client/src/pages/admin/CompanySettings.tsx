@@ -59,6 +59,8 @@ interface SettingsForm {
   colorTheme: string;
   googleReviewsUrl: string;
   customDomain: string;
+  usdRate: string;
+  eurRate: string;
   deliveryEnabled: boolean;
   deliveryFee: string;
   deliveryMinOrder: string;
@@ -87,6 +89,8 @@ export default function CompanySettings() {
     colorTheme: "#e85d04",
     googleReviewsUrl: "",
     customDomain: "",
+    usdRate: "",
+    eurRate: "",
     deliveryEnabled: false,
     deliveryFee: "",
     deliveryMinOrder: "",
@@ -122,7 +126,7 @@ export default function CompanySettings() {
     { companyId },
     { enabled: !!companyId && isAuthenticated }
   );
-  const { data: printRates = { BRL: 1, USD: 0.19, EUR: 0.18 } } = trpc.currency.getRates.useQuery();
+  const { data: printRates = { BRL: 1, USD: 0.19, EUR: 0.18 } } = trpc.currency.getRates.useQuery({ companyId });
 
   // Initialize form ONCE when company data loads — prevents overwriting user edits
   useEffect(() => {
@@ -141,6 +145,8 @@ export default function CompanySettings() {
         colorTheme: company.colorTheme ?? "#e85d04",
         googleReviewsUrl: (company as any).googleReviewsUrl ?? "",
         customDomain: (company as any).customDomain ?? "",
+        usdRate: (company as any).usdRate ?? "",
+        eurRate: (company as any).eurRate ?? "",
         deliveryEnabled: company.deliveryEnabled ?? false,
         deliveryFee: company.deliveryFee ?? "",
         deliveryMinOrder: company.deliveryMinOrder ?? "",
@@ -296,8 +302,9 @@ export default function CompanySettings() {
       if (!brl) return "";
       const n = parseFloat(String(brl));
       if (printCurrency === "BRL") return `R$ ${n.toFixed(2)}`;
-      if (printCurrency === "USD") return `$ ${(n * (r["USD"] ?? 0.19)).toFixed(2)}`;
-      return `€ ${(n * (r["EUR"] ?? 0.18)).toFixed(2)}`;
+      const isManual = (printRates as any).manual;
+      if (printCurrency === "USD") return isManual ? `$ ${(n / (r["USD"] ?? 5.5)).toFixed(2)}` : `$ ${(n * (r["USD"] ?? 0.19)).toFixed(2)}`;
+      return isManual ? `€ ${(n / (r["EUR"] ?? 6.0)).toFixed(2)}` : `€ ${(n * (r["EUR"] ?? 0.18)).toFixed(2)}`;
     };
     const getName = (item: any) => {
       if (printLang === "es" && item.nameEs) return item.nameEs;
@@ -756,6 +763,52 @@ export default function CompanySettings() {
                     </p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Exchange Rates */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span>💱</span> Cotação de Moedas
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Configure manualmente a cotação do Dólar e Euro em relação ao Real. Se deixar em branco, a cotação será obtida automaticamente.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Dólar (US$) — valor em R$</Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">R$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Ex: 5.80"
+                        value={form.usdRate}
+                        onChange={(e) => setForm((f) => ({ ...f, usdRate: e.target.value }))}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">1 USD = R$ {form.usdRate || "automático"}</p>
+                  </div>
+                  <div>
+                    <Label>Euro (€) — valor em R$</Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">R$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Ex: 6.20"
+                        value={form.eurRate}
+                        onChange={(e) => setForm((f) => ({ ...f, eurRate: e.target.value }))}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">1 EUR = R$ {form.eurRate || "automático"}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 

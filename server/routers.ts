@@ -418,15 +418,34 @@ export const appRouter = router({
 
   // ─── Currency ───────────────────────────────────────────────────────────────
   currency: router({
-    getRates: publicProcedure.query(async () => {
-      const rates = await getExchangeRates();
-      return {
-        USD: rates["USD"] ?? 0.19,
-        EUR: rates["EUR"] ?? 0.18,
-        BRL: 1,
-        fetchedAt: ratesCache?.fetchedAt ?? Date.now(),
-      };
-    }),
+    getRates: publicProcedure
+      .input(z.object({ companyId: z.number().optional() }))
+      .query(async ({ input }) => {
+        // Se companyId fornecido, verificar taxas manuais
+        if (input.companyId) {
+          const company = await getCompanyById(input.companyId);
+          const usdManual = company?.usdRate ? parseFloat(String(company.usdRate)) : null;
+          const eurManual = company?.eurRate ? parseFloat(String(company.eurRate)) : null;
+          if (usdManual || eurManual) {
+            const auto = await getExchangeRates();
+            return {
+              USD: usdManual ?? auto["USD"] ?? 0.19,
+              EUR: eurManual ?? auto["EUR"] ?? 0.18,
+              BRL: 1,
+              manual: true,
+              fetchedAt: Date.now(),
+            };
+          }
+        }
+        const rates = await getExchangeRates();
+        return {
+          USD: rates["USD"] ?? 0.19,
+          EUR: rates["EUR"] ?? 0.18,
+          BRL: 1,
+          manual: false,
+          fetchedAt: ratesCache?.fetchedAt ?? Date.now(),
+        };
+      }),
   }),
 
   // ─── Users (admin panel) ───────────────────────────────────────────────────
@@ -597,12 +616,14 @@ export const appRouter = router({
         paymentPicPay: z.string().optional(),
         active: z.boolean().optional(),
         menuTemplate: z.string().optional(),
+        usdRate: z.string().optional(),
+        eurRate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.id, ctx.user.role);
         const { id, ...rawData } = input;
         // Filter undefined AND empty strings for nullable URL fields to avoid MySQL errors
-        const nullableFields = ["facebook","instagram","website","whatsapp","customDomain","googleReviewsUrl","deliveryFee","deliveryMinOrder","paymentMercadoPago","paymentPagSeguro","paymentPicPay","address","phone","description","carouselImages"];
+        const nullableFields = ["facebook","instagram","website","whatsapp","customDomain","googleReviewsUrl","deliveryFee","deliveryMinOrder","paymentMercadoPago","paymentPagSeguro","paymentPicPay","address","phone","description","carouselImages","usdRate","eurRate"];
         const data = Object.fromEntries(
           Object.entries(rawData).map(([k, v]) => [
             k,

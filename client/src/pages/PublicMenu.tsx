@@ -254,7 +254,7 @@ export default function PublicMenu() {
   const { data: company, isLoading } = trpc.companies.getBySlug.useQuery({ slug }, { enabled: !!slug });
   const { data: categories = [] } = trpc.categories.publicList.useQuery({ companyId: company?.id ?? 0 }, { enabled: !!company?.id });
   const { data: menuItems = [] } = trpc.menuItems.publicList.useQuery({ companyId: company?.id ?? 0 }, { enabled: !!company?.id });
-  const { data: rates = { BRL: 1, USD: 0.19, EUR: 0.18 } } = trpc.currency.getRates.useQuery();
+  const { data: rates = { BRL: 1, USD: 0.19, EUR: 0.18 } } = trpc.currency.getRates.useQuery({ companyId: company?.id });
   const submitReview = trpc.reviews.submit.useMutation();
   const translatePublic = trpc.translation.translatePublic.useMutation();
 
@@ -269,12 +269,21 @@ export default function PublicMenu() {
     } catch { return []; }
   }, [company]);
 
-  const r = rates as Record<string, number>;
+  const r = rates as Record<string, number> & { manual?: boolean };
   const fmtAllCurrencies = (brl: string | number | null | undefined) => {
     if (!brl) return "";
     const n = parseFloat(String(brl));
-    const usd = (n * (r["USD"] ?? 0.19)).toFixed(2);
-    const eur = (n * (r["EUR"] ?? 0.18)).toFixed(2);
+    let usd: string, eur: string;
+    if (r.manual) {
+      // Taxa manual: usdRate = "quanto vale 1 USD em BRL", ex: 5.80
+      // Então: USD = BRL / usdRate
+      usd = (n / (r["USD"] ?? 5.5)).toFixed(2);
+      eur = (n / (r["EUR"] ?? 6.0)).toFixed(2);
+    } else {
+      // Taxa automática: API retorna "1 BRL = X USD"
+      usd = (n * (r["USD"] ?? 0.19)).toFixed(2);
+      eur = (n * (r["EUR"] ?? 0.18)).toFixed(2);
+    }
     return { brl: `R$ ${n.toFixed(2)}`, usd: `$ ${usd}`, eur: `€ ${eur}` };
   };
 
