@@ -203,17 +203,30 @@ export default function AdminMenuItems() {
       return;
     }
     setUploadingImage(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
+    // Redimensionar para max 600px e comprimir para caber no banco
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const MAX = 600;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      const base64 = dataUrl.split(",")[1];
       uploadImageMutation.mutate({
         companyId,
-        fileName: file.name,
-        contentType: file.type,
+        fileName: file.name.replace(/\.[^.]+$/, ".jpg"),
+        contentType: "image/jpeg",
         base64,
       });
     };
-    reader.readAsDataURL(file);
+    img.src = objectUrl;
   }
 
   function openCreate() {
