@@ -34,6 +34,9 @@ import {
   getUserByEmailWithPassword,
   getUserById,
   getUserCompanies,
+  getPendingUsers,
+  registerUser,
+  updateUserStatus,
   removeCompanyMember,
   setUserPassword,
   updateCategory,
@@ -209,6 +212,13 @@ export const appRouter = router({
         if (!valid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
         }
+        // Verificar status da conta
+        if ((user as any).status === "pending") {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Sua conta está aguardando aprovação do administrador." });
+        }
+        if ((user as any).status === "rejected") {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Sua conta foi recusada. Entre em contato com o administrador." });
+        }
         // Create session token using existing SDK
         const token = await sdk.signSession(
           { openId: user.openId, appId: "larf", name: user.name ?? user.email ?? "" },
@@ -223,6 +233,26 @@ export const appRouter = router({
         // Return user info and their companies
         const companies = await getUserCompanies(user.id);
         return { user, companies };
+      }),
+    // ─── Registro público (conta fica pendente até aprovação) ────────────────
+    register: publicProcedure
+      .input(z.object({
+        name: z.string().min(2, "Nome muito curto"),
+        email: z.string().email("E-mail inválido"),
+        password: z.string().min(6, "Mínimo 6 caracteres"),
+      }))
+      .mutation(async ({ input }) => {
+        const existing = await getUserByEmail(input.email.toLowerCase().trim());
+        if (existing) {
+          throw new TRPCError({ code: "CONFLICT", message: "Este e-mail já está cadastrado." });
+        }
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        await registerUser({
+          name: input.name,
+          email: input.email.toLowerCase().trim(),
+          passwordHash,
+        });
+        return { success: true };
       }),
     // ─── Definir/alterar senha de usuário (superadmin) ─────────────────────
     setPassword: protectedProcedure
@@ -361,6 +391,24 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return getUserById(input.id);
+      }),
+
+    pending: superadminProcedure.query(async () => {
+      return getPendingUsers();
+    }),
+
+    approve: superadminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await updateUserStatus(input.id, "active");
+        return { success: true };
+      }),
+
+    reject: superadminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await updateUserStatus(input.id, "rejected");
+        return { success: true };
       }),
 
     delete: superadminProcedure

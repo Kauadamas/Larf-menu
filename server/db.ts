@@ -405,3 +405,32 @@ export async function markTokenUsed(token: string) {
   if (!db) throw new Error("DB not available");
   await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.token, token));
 }
+
+export async function registerUser(data: { name: string; email: string; passwordHash: string }): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const openId = `reg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const result = await db.insert(users).values({
+    openId,
+    name: data.name,
+    email: data.email,
+    passwordHash: data.passwordHash,
+    loginMethod: "password",
+    role: "user",
+    status: "pending",
+    lastSignedIn: new Date(),
+  } as any);
+  return Number((result[0] as { insertId: number }).insertId);
+}
+
+export async function getPendingUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).where(eq((users as any).status, "pending"));
+}
+
+export async function updateUserStatus(id: number, status: "active" | "rejected") {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ status } as any).where(eq(users.id, id));
+}

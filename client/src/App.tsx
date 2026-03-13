@@ -17,6 +17,7 @@ import SmartImport from "./pages/admin/SmartImport";
 import PublicMenu from "./pages/PublicMenu";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
+import Register from "./pages/Register";
 import { SubdomainRouter } from "./components/SubdomainRouter";
 
 function Router() {
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/admin/users" component={AdminUsers} />
       {/* Login & password */}
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/reset-password" component={ResetPassword} />
       {/* Landing page */}
       <Route path="/" component={Home} />

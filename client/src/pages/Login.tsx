@@ -135,6 +135,13 @@ export default function Login() {
         <p className="text-center text-xs text-gray-400 mt-6">
           © {new Date().getFullYear()} Larf Menu · Todos os direitos reservados
         </p>
+
+        <p className="text-center text-sm text-gray-500 mt-2">
+          Não tem uma conta?{" "}
+          <a href="/register" className="text-orange-600 hover:underline font-medium">
+            Solicitar acesso
+          </a>
+        </p>
       </div>
 
       {/* Forgot Password Dialog */}

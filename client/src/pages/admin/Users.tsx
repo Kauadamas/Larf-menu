@@ -72,6 +72,25 @@ export default function AdminUsers() {
     enabled: isAuthenticated && (me?.role === "superadmin" || me?.role === "admin"),
   });
 
+  const { data: pendingList } = trpc.users.pending.useQuery(undefined, {
+    enabled: isAuthenticated && (me?.role === "superadmin" || me?.role === "admin"),
+  });
+
+  const approveMutation = trpc.users.approve.useMutation({
+    onSuccess: () => {
+      utils.users.list.invalidate();
+      utils.users.pending.invalidate();
+      toast.success("Usuário aprovado!");
+    },
+  });
+
+  const rejectMutation = trpc.users.reject.useMutation({
+    onSuccess: () => {
+      utils.users.pending.invalidate();
+      toast.success("Usuário recusado.");
+    },
+  });
+
   const updateRoleMutation = trpc.users.updateRole.useMutation({
     onSuccess: () => {
       utils.users.list.invalidate();
@@ -228,6 +247,64 @@ export default function AdminUsers() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Usuários aguardando aprovação */}
+        {pendingList && pendingList.length > 0 && (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-orange-700 flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
+                Solicitações de acesso pendentes ({pendingList.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-orange-200">
+                      <th className="text-left px-4 py-3 font-medium text-orange-700">Nome</th>
+                      <th className="text-left px-4 py-3 font-medium text-orange-700">E-mail</th>
+                      <th className="text-left px-4 py-3 font-medium text-orange-700">Cadastrado em</th>
+                      <th className="text-right px-4 py-3 font-medium text-orange-700">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingList.map((u: any) => (
+                      <tr key={u.id} className="border-b border-orange-100 last:border-0">
+                        <td className="px-4 py-3 font-medium">{u.name || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString("pt-BR") : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white h-7 px-3 text-xs"
+                              disabled={approveMutation.isPending}
+                              onClick={() => approveMutation.mutate({ id: u.id })}
+                            >
+                              Aprovar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 px-3 text-xs"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => rejectMutation.mutate({ id: u.id })}
+                            >
+                              Recusar
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {isLoading ? (
           <div className="text-center py-12 text-muted-foreground">Carregando usuários...</div>
