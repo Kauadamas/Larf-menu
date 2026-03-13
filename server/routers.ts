@@ -101,6 +101,19 @@ function stripHtml(str: string): string {
   return str.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
 }
 
+// Corrige resultado de APIs que retornam tudo em lowercase
+// Capitaliza a primeira letra de cada frase
+function fixCapitalization(original: string, translated: string): string {
+  // Se o original começa com maiúscula e o traduzido não, corrige
+  if (original.length > 0 && translated.length > 0) {
+    const firstChar = translated.charAt(0);
+    if (firstChar === firstChar.toLowerCase() && original.charAt(0) === original.charAt(0).toUpperCase()) {
+      return firstChar.toUpperCase() + translated.slice(1);
+    }
+  }
+  return translated;
+}
+
 async function translateViaGoogle(text: string, targetLang: string): Promise<string> {
   const encoded = encodeURIComponent(text);
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&tl=${targetLang}&dt=t&q=${encoded}`;
@@ -203,7 +216,8 @@ async function translateText(text: string, targetLang: string): Promise<string> 
   let lastError: Error = new Error("All providers failed");
   for (const provider of providers) {
     try {
-      const result = await provider.fn();
+      const raw = await provider.fn();
+      const result = fixCapitalization(text, raw);
       translationCache.set(cacheKey, result);
       return result;
     } catch (err) {

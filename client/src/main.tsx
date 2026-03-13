@@ -39,7 +39,13 @@ queryClient.getMutationCache().subscribe(event => {
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/trpc",
+      url: (() => {
+        const h = window.location.hostname;
+        if (h.endsWith(".larfmenu.com.br") && h !== "larfmenu.com.br") {
+          return "https://larfmenu.com.br/api/trpc";
+        }
+        return "/api/trpc";
+      })(),
       transformer: superjson,
       fetch(input, init) {
         return globalThis.fetch(input, {
