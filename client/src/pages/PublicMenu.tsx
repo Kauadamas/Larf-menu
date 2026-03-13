@@ -87,7 +87,9 @@ function checkIsOpen(businessHours: any): boolean | null {
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const today = dayNames[now.getDay()];
     const todayHours = hours[today];
-    if (!todayHours || !todayHours.enabled) return false;
+    // Campo pode ser "enabled" (true = aberto) ou "closed" (true = fechado)
+    const isEnabled = todayHours.enabled !== undefined ? todayHours.enabled : !todayHours.closed;
+    if (!todayHours || !isEnabled) return false;
     const [openH, openM] = todayHours.open.split(":").map(Number);
     const [closeH, closeM] = todayHours.close.split(":").map(Number);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
