@@ -264,6 +264,7 @@ export default function AdminUsers() {
                     <tr className="border-b border-orange-200">
                       <th className="text-left px-4 py-3 font-medium text-orange-700">Nome</th>
                       <th className="text-left px-4 py-3 font-medium text-orange-700">E-mail</th>
+                      <th className="text-left px-4 py-3 font-medium text-orange-700">Restaurante</th>
                       <th className="text-left px-4 py-3 font-medium text-orange-700">Cadastrado em</th>
                       <th className="text-right px-4 py-3 font-medium text-orange-700">Ações</th>
                     </tr>
@@ -273,6 +274,11 @@ export default function AdminUsers() {
                       <tr key={u.id} className="border-b border-orange-100 last:border-0">
                         <td className="px-4 py-3 font-medium">{u.name || "—"}</td>
                         <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {u.companies?.length > 0
+                            ? u.companies.map((c: any) => c.name).join(", ")
+                            : <span className="italic">Sem restaurante</span>}
+                        </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString("pt-BR") : "—"}
                         </td>

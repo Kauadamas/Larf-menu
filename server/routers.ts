@@ -240,18 +240,30 @@ export const appRouter = router({
         name: z.string().min(2, "Nome muito curto"),
         email: z.string().email("E-mail inválido"),
         password: z.string().min(6, "Mínimo 6 caracteres"),
+        restaurantName: z.string().min(2, "Nome do restaurante muito curto"),
+        restaurantSlug: z.string().min(2).regex(/^[a-z0-9-]+$/, "Slug inválido — use apenas letras minúsculas, números e hífens"),
       }))
       .mutation(async ({ input }) => {
         const existing = await getUserByEmail(input.email.toLowerCase().trim());
         if (existing) {
           throw new TRPCError({ code: "CONFLICT", message: "Este e-mail já está cadastrado." });
         }
+        const existingSlug = await getCompanyBySlug(input.restaurantSlug);
+        if (existingSlug) {
+          throw new TRPCError({ code: "CONFLICT", message: "Este slug já está em uso. Escolha outro." });
+        }
         const passwordHash = await bcrypt.hash(input.password, 10);
-        await registerUser({
+        const userId = await registerUser({
           name: input.name,
           email: input.email.toLowerCase().trim(),
           passwordHash,
         });
+        const companyId = await createCompany({
+          name: input.restaurantName,
+          slug: input.restaurantSlug,
+          active: false,
+        });
+        await addCompanyMember({ companyId, userId, role: "owner" });
         return { success: true };
       }),
     // ─── Definir/alterar senha de usuário (superadmin) ─────────────────────
@@ -394,13 +406,28 @@ export const appRouter = router({
       }),
 
     pending: superadminProcedure.query(async () => {
-      return getPendingUsers();
+      const pending = await getPendingUsers();
+      // Incluir restaurantes de cada usuário pendente
+      const result = await Promise.all(pending.map(async (u) => {
+        const memberships = await getUserCompanies(u.id);
+        return { ...u, companies: memberships.map(m => m.company) };
+      }));
+      return result;
     }),
 
     approve: superadminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await updateUserStatus(input.id, "active");
+        // Ativar restaurantes do usuário
+        try {
+          const memberships = await getUserCompanies(input.id);
+          for (const m of memberships) {
+            await updateCompany(m.company.id, { active: true });
+          }
+        } catch (err) {
+          console.warn("[Approve] Failed to activate companies:", err);
+        }
         // Enviar e-mail de aprovação
         try {
           const user = await getUserById(input.id);
