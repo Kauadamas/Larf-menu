@@ -64,6 +64,13 @@
       "when": 1773229547036,
       "tag": "0008_sweet_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1773750915275,
+      "tag": "0009_far_eternals",
+      "breakpoints": true
     }
   ]
 }

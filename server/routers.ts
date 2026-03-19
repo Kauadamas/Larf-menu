@@ -490,9 +490,14 @@ export const appRouter = router({
           const eurManual = company?.eurRate ? parseFloat(String(company.eurRate)) : null;
           if (usdManual || eurManual) {
             const auto = await getExchangeRates();
+            // auto API returns "1 BRL = X USD/EUR" (multiplier)
+            // manual rates are "1 USD/EUR = X BRL" (divisor)
+            // Normalize: convert auto to "BRL per unit" so the client always divides
+            const autoUsdPerBrl = (auto["USD"] && auto["USD"] > 0) ? 1 / auto["USD"] : 5.5;
+            const autoEurPerBrl = (auto["EUR"] && auto["EUR"] > 0) ? 1 / auto["EUR"] : 6.0;
             return {
-              USD: usdManual ?? auto["USD"] ?? 0.19,
-              EUR: eurManual ?? auto["EUR"] ?? 0.18,
+              USD: usdManual ?? autoUsdPerBrl,
+              EUR: eurManual ?? autoEurPerBrl,
               BRL: 1,
               manual: true,
               fetchedAt: Date.now(),
@@ -680,6 +685,7 @@ export const appRouter = router({
         menuTemplate: z.string().optional(),
         usdRate: z.string().optional(),
         eurRate: z.string().optional(),
+        cartEnabled: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.id, ctx.user.role);
@@ -889,6 +895,8 @@ export const appRouter = router({
         priceBrl: z.string(),
         imageUrl: z.string().optional(),
         imageKey: z.string().optional(),
+        imageUrls: z.string().optional(),       // JSON array de URLs para carrossel
+        priceWhatsapp: z.boolean().default(false),
         sortOrder: z.number().default(0),
         isVegetarian: z.boolean().default(false),
         containsGluten: z.boolean().default(false),
@@ -916,6 +924,8 @@ export const appRouter = router({
         priceBrl: z.string().optional(),
         imageUrl: z.string().optional(),
         imageKey: z.string().optional(),
+        imageUrls: z.string().optional(),
+        priceWhatsapp: z.boolean().optional(),
         available: z.boolean().optional(),
         sortOrder: z.number().optional(),
         isVegetarian: z.boolean().optional(),

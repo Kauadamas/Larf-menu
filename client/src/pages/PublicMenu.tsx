@@ -84,18 +84,64 @@ function checkIsOpen(businessHours: any): boolean | null {
   try {
     const hours = typeof businessHours === "string" ? JSON.parse(businessHours) : businessHours;
     const now = new Date();
-    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const today = dayNames[now.getDay()];
-    const todayHours = hours[today];
-    // Campo pode ser "enabled" (true = aberto) ou "closed" (true = fechado)
-    const isEnabled = todayHours.enabled !== undefined ? todayHours.enabled : !todayHours.closed;
-    if (!todayHours || !isEnabled) return false;
-    const [openH, openM] = todayHours.open.split(":").map(Number);
-    const [closeH, closeM] = todayHours.close.split(":").map(Number);
+    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const todayKey = dayKeys[now.getDay()];
+    const todayHours = hours[todayKey];
+    if (!todayHours) return null;
+    if (todayHours.closed) return false;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const openMinutes = openH * 60 + openM;
-    const closeMinutes = closeH * 60 + closeM;
-    return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+    // Suporte a múltiplos intervalos
+    if (Array.isArray(todayHours.intervals)) {
+      return todayHours.intervals.some((iv: { open: string; close: string }) => {
+        const [oh, om] = iv.open.split(":").map(Number);
+        const [ch, cm] = iv.close.split(":").map(Number);
+        const openMin = oh * 60 + om;
+        // 00:00 como fechamento = meia-noite = fim do dia (1440 min)
+        const closeMin = (ch === 0 && cm === 0) ? 24 * 60 : ch * 60 + cm;
+        // Suporte a horários que cruzam meia-noite (ex: 22:00 – 02:00)
+        if (closeMin < openMin) {
+          return nowMinutes >= openMin || nowMinutes < closeMin;
+        }
+        return nowMinutes >= openMin && nowMinutes < closeMin;
+      });
+    }
+    // Formato legado
+    const isEnabled = todayHours.enabled !== undefined ? todayHours.enabled : !todayHours.closed;
+    if (!isEnabled) return false;
+    if (todayHours.open && todayHours.close) {
+      const [oh, om] = todayHours.open.split(":").map(Number);
+      const [ch, cm] = todayHours.close.split(":").map(Number);
+      const openMin = oh * 60 + om;
+      const closeMin = (ch === 0 && cm === 0) ? 24 * 60 : ch * 60 + cm;
+      if (closeMin < openMin) return nowMinutes >= openMin || nowMinutes < closeMin;
+      return nowMinutes >= openMin && nowMinutes < closeMin;
+    }
+    return null;
+  } catch { return null; }
+}
+
+// Formata horários para exibição no cardápio público
+function formatBusinessHours(businessHours: any): Array<{ day: string; text: string; closed: boolean }> | null {
+  if (!businessHours) return null;
+  try {
+    const hours = typeof businessHours === "string" ? JSON.parse(businessHours) : businessHours;
+    const dayKeys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const dayLabels: Record<string, string> = {
+      mon: "Seg", tue: "Ter", wed: "Qua", thu: "Qui", fri: "Sex", sat: "Sáb", sun: "Dom",
+    };
+    return dayKeys.map((key) => {
+      const d = hours[key];
+      if (!d) return { day: dayLabels[key]!, text: "Fechado", closed: true };
+      if (d.closed) return { day: dayLabels[key]!, text: "Fechado", closed: true };
+      // múltiplos intervalos
+      if (Array.isArray(d.intervals) && d.intervals.length > 0) {
+        const text = d.intervals.map((iv: { open: string; close: string }) => `${iv.open}–${iv.close}`).join(" / ");
+        return { day: dayLabels[key]!, text, closed: false };
+      }
+      // legado
+      if (d.open && d.close) return { day: dayLabels[key]!, text: `${d.open}–${d.close}`, closed: false };
+      return { day: dayLabels[key]!, text: "Fechado", closed: true };
+    });
   } catch { return null; }
 }
 
@@ -165,12 +211,13 @@ function DietaryBadges({ item, t, muted }: { item: any; t: typeof T["pt"]; muted
 }
 
 // ─── Item Card ────────────────────────────────────────────────────────────────
-function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCurrencies, onAdd, t, isChefRecommended, overrides }: {
+function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCurrencies, onAdd, t, isChefRecommended, overrides, cartEnabled }: {
   item: any; lang: Lang; primary: string; surface: string; border: string;
   text: string; muted: string;
   fmtAllCurrencies: (p: any) => { brl: string; usd: string; eur: string } | "";
   onAdd: () => void; t: typeof T["pt"]; isChefRecommended?: boolean;
   overrides?: Record<string, string>;
+  cartEnabled?: boolean;
 }) {
   const name = getName(item, lang, overrides);
   const desc = getDesc(item, lang, overrides);
@@ -209,7 +256,18 @@ function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCur
           <DietaryBadges item={item} t={t} muted={muted} />
         </div>
         <div className="flex items-end justify-between mt-2">
-          {prices ? (
+          {item.priceWhatsapp ? (
+            <div>
+              <a
+                href={`https://wa.me/${(item as any)._companyWhatsapp ?? ""}`.replace(/\s/g, "")}
+                target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full"
+                style={{ backgroundColor: "#25d36620", color: "#128c7e" }}>
+                <MessageCircle className="h-3 w-3" />
+                {lang === "en" ? "Ask on WhatsApp" : lang === "es" ? "Consultar por WhatsApp" : "Sob consulta"}
+              </a>
+            </div>
+          ) : prices ? (
             <div>
               <p className="font-bold text-sm" style={{ color: primary }}>{prices.brl}</p>
               <p className="text-xs" style={{ color: muted }}>{prices.usd} · {prices.eur}</p>
@@ -217,13 +275,77 @@ function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCur
           ) : (
             <span />
           )}
-          {item.available && (
+          {item.available && cartEnabled !== false && !item.priceWhatsapp && (
             <button onClick={onAdd}
               className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
               style={{ backgroundColor: primary }}>+</button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── BusinessHoursBar Component ───────────────────────────────────────────────
+function BusinessHoursBar({ businessHours, isOpen, lang, surface, border, textColor, muted, primary }: {
+  businessHours: any;
+  isOpen: boolean | null;
+  lang: string;
+  surface: string;
+  border: string;
+  textColor: string;
+  muted: string;
+  primary: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const hoursData = formatBusinessHours(businessHours);
+  if (!hoursData) return null;
+
+  const dayOfWeek = new Date().getDay(); // 0=Dom, 1=Seg...
+  const keyOrder = ["mon","tue","wed","thu","fri","sat","sun"];
+  const todayKey = ["sun","mon","tue","wed","thu","fri","sat"][dayOfWeek];
+  const todayIdx = keyOrder.indexOf(todayKey!);
+  const today = hoursData[todayIdx >= 0 ? todayIdx : 0];
+
+  return (
+    <div style={{ backgroundColor: surface, borderBottom: `1px solid ${border}` }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: primary }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs font-medium" style={{ color: textColor }}>
+            {today?.closed
+              ? (lang === "en" ? "Closed today" : lang === "es" ? "Cerrado hoy" : "Fechado hoje")
+              : (lang === "en" ? `Today: ${today?.text}` : lang === "es" ? `Hoy: ${today?.text}` : `Hoje: ${today?.text}`)}
+          </span>
+          {isOpen !== null && (
+            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: isOpen ? "#dcfce7" : "#fee2e2", color: isOpen ? "#16a34a" : "#dc2626" }}>
+              {isOpen ? (lang === "en" ? "Open" : lang === "es" ? "Abierto" : "Aberto") : (lang === "en" ? "Closed" : lang === "es" ? "Cerrado" : "Fechado")}
+            </span>
+          )}
+        </div>
+        <svg className="w-3.5 h-3.5 flex-shrink-0 transition-transform" style={{ color: muted, transform: open ? "rotate(180deg)" : "none" }}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 grid grid-cols-2 gap-x-6 gap-y-1">
+          {hoursData.map((d) => (
+            <div key={d.day} className="flex items-center justify-between py-0.5">
+              <span className="text-xs font-semibold w-8" style={{ color: muted }}>{d.day}</span>
+              <span className="text-xs flex-1 text-right" style={{ color: d.closed ? "#dc2626" : textColor }}>
+                {d.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -261,6 +383,7 @@ export default function PublicMenu() {
   const primary = resolveColor(company?.colorTheme);
   const t = T[lang];
   const isOpen = checkIsOpen((company as any)?.businessHours);
+  const cartEnabled = (company as any)?.cartEnabled !== false; // default true
 
   const carouselImages = useMemo<string[]>(() => {
     try {
@@ -480,6 +603,7 @@ export default function PublicMenu() {
     cartCount, cartTotal, sendOrder,
     search, setSearch: (v: string) => { setSearch(v); if (!v) setSearchOpen(false); },
     filteredItems, catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages,
+    cartEnabled,
   };
 
   if (!company) return (
@@ -513,11 +637,46 @@ export default function PublicMenu() {
           {/* Language + translate + dark mode controls */}
           <div className="flex items-center justify-between px-4 pt-2.5 pb-0 gap-2 flex-wrap">
             <div className="flex gap-1">
-              {(["pt", "es", "en"] as Lang[]).map(l => (
-                <button key={l} onClick={() => handleSetLang(l)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
-                  style={{ backgroundColor: lang === l ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.2)", color: lang === l ? primary : "white" }}>
-                  {l.toUpperCase()}
+              {([
+                {
+                  code: "pt" as Lang, label: "PT",
+                  flag: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 14" className="w-4 h-3 rounded-sm flex-shrink-0">
+                      <rect width="8" height="14" fill="#009c3b"/>
+                      <rect x="8" width="12" height="14" fill="#FEDD00"/>
+                      <circle cx="8" cy="7" r="3.5" fill="#002776"/>
+                      <path d="M4.5 7a3.5 3.5 0 0 0 3.5 3.5" stroke="white" strokeWidth="0.5" fill="none"/>
+                      <ellipse cx="8" cy="7" rx="3.5" ry="2.2" fill="none" stroke="white" strokeWidth="0.4"/>
+                    </svg>
+                  ),
+                },
+                {
+                  code: "es" as Lang, label: "ES",
+                  flag: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 14" className="w-4 h-3 rounded-sm flex-shrink-0">
+                      <rect width="20" height="14" fill="#c60b1e"/>
+                      <rect y="3.5" width="20" height="7" fill="#ffc400"/>
+                    </svg>
+                  ),
+                },
+                {
+                  code: "en" as Lang, label: "EN",
+                  flag: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 14" className="w-4 h-3 rounded-sm flex-shrink-0">
+                      <rect width="20" height="14" fill="#012169"/>
+                      <path d="M0,0 L20,14 M20,0 L0,14" stroke="white" strokeWidth="2.8"/>
+                      <path d="M0,0 L20,14 M20,0 L0,14" stroke="#C8102E" strokeWidth="1.8"/>
+                      <path d="M10,0 V14 M0,7 H20" stroke="white" strokeWidth="4.5"/>
+                      <path d="M10,0 V14 M0,7 H20" stroke="#C8102E" strokeWidth="2.8"/>
+                    </svg>
+                  ),
+                },
+              ]).map(l => (
+                <button key={l.code} onClick={() => handleSetLang(l.code)}
+                  className="px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                  style={{ backgroundColor: lang === l.code ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.2)", color: lang === l.code ? primary : "white" }}>
+                  {l.flag}
+                  <span>{l.label}</span>
                 </button>
               ))}
             </div>
@@ -548,8 +707,8 @@ export default function PublicMenu() {
                 {isOpen !== null && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
                     style={{ backgroundColor: isOpen ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)", color: isOpen ? "#bbf7d0" : "#fecaca" }}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isOpen ? "#4ade80" : "#f87171" }} />
-                    {isOpen ? (lang === "en" ? "Open" : lang === "es" ? "Abierto" : "Aberto") : (lang === "en" ? "Closed" : lang === "es" ? "Cerrado" : "Fechado")}
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: isOpen ? "#4ade80" : "#f87171" }} />
+                    {isOpen ? (lang === "en" ? "Open now" : lang === "es" ? "Abierto ahora" : "Aberto agora") : (lang === "en" ? "Closed" : lang === "es" ? "Cerrado" : "Fechado")}
                   </span>
                 )}
               </div>
@@ -614,6 +773,18 @@ export default function PublicMenu() {
         </div>
       </div>
 
+      {/* ── HORÁRIOS DE FUNCIONAMENTO ────────────────────────────────────── */}
+      <BusinessHoursBar
+        businessHours={(company as any)?.businessHours}
+        isOpen={isOpen}
+        lang={lang}
+        surface={surface}
+        border={border}
+        textColor={text}
+        muted={muted}
+        primary={primary}
+      />
+
       {/* ── CATEGORY BAR ─────────────────────────────────────────────────── */}
       <div ref={catBarRef}
         className="sticky top-0 z-30 overflow-x-auto flex gap-2 px-4 py-3 scrollbar-hide"
@@ -654,7 +825,7 @@ export default function PublicMenu() {
                 <ItemCard key={item.id} item={item} lang={lang} primary={primary}
                   surface={surface} border={border} text={text} muted={muted}
                   fmtAllCurrencies={fmtAllCurrencies} onAdd={() => addToCart(item)} t={t}
-                  isChefRecommended overrides={translationOverrides} />
+                  isChefRecommended overrides={translationOverrides} cartEnabled={cartEnabled} />
               ))}
             </div>
           </section>
@@ -687,7 +858,7 @@ export default function PublicMenu() {
                 <ItemCard key={item.id} item={item} lang={lang} primary={primary}
                   surface={surface} border={border} text={text} muted={muted}
                   fmtAllCurrencies={fmtAllCurrencies} onAdd={() => addToCart(item)} t={t}
-                  overrides={translationOverrides} />
+                  overrides={translationOverrides} cartEnabled={cartEnabled} />
               ))}
             </div>
           </section>
@@ -696,7 +867,8 @@ export default function PublicMenu() {
 
       {/* ── FLOATING BUTTONS ─────────────────────────────────────────────────────────────── */}
       <div className="fixed bottom-6 right-4 flex flex-col gap-3 z-40">
-        {/* Cart button */}
+        {/* Cart button — only shown when cartEnabled */}
+        {cartEnabled && (
         <button onClick={() => setCartOpen(true)}
           className="w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-transform hover:scale-105 relative"
           style={{ backgroundColor: primary }}>
@@ -709,6 +881,7 @@ export default function PublicMenu() {
             </span>
           )}
         </button>
+        )}
       </div>
 
       {/* ── SEARCH MODAL ─────────────────────────────────────────────────── */}

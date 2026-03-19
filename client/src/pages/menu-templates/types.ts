@@ -9,6 +9,7 @@ export const T = {
     chefRecommends: "Mais Pedidos", vegetarian: "Vegetariano", spicy: "Picante",
     containsGluten: "Contém Glúten", containsLactose: "Contém Lactose",
     note: "Observação (opcional)", translating: "Traduzindo...",
+    priceWhatsapp: "Consultar via WhatsApp",
   },
   es: {
     items: "ítems", unavailable: "No disponible", addToCart: "Agregar",
@@ -17,6 +18,7 @@ export const T = {
     chefRecommends: "Más Pedidos", vegetarian: "Vegetariano", spicy: "Picante",
     containsGluten: "Contiene Gluten", containsLactose: "Contiene Lactosa",
     note: "Observación (opcional)", translating: "Traduciendo...",
+    priceWhatsapp: "Consultar por WhatsApp",
   },
   en: {
     items: "items", unavailable: "Unavailable", addToCart: "Add",
@@ -25,6 +27,7 @@ export const T = {
     chefRecommends: "Most Ordered", vegetarian: "Vegetarian", spicy: "Spicy",
     containsGluten: "Contains Gluten", containsLactose: "Contains Lactose",
     note: "Note (optional)", translating: "Translating...",
+    priceWhatsapp: "Ask on WhatsApp",
   },
 };
 
@@ -51,16 +54,29 @@ export function checkIsOpen(businessHours: any): boolean | null {
   try {
     const hours = typeof businessHours === "string" ? JSON.parse(businessHours) : businessHours;
     const now = new Date();
-    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const today = dayNames[now.getDay()];
-    const todayHours = hours[today];
-    if (!todayHours || !todayHours.enabled) return false;
-    const [openH, openM] = todayHours.open.split(":").map(Number);
-    const [closeH, closeM] = todayHours.close.split(":").map(Number);
+    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const todayKey = dayKeys[now.getDay()];
+    const todayHours = hours[todayKey];
+    if (!todayHours) return null;
+    if (todayHours.closed) return false;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const openMinutes = openH * 60 + openM;
-    const closeMinutes = closeH * 60 + closeM;
-    return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+
+    // Suporte a múltiplos intervalos: { closed, intervals: [{open, close}] }
+    if (Array.isArray(todayHours.intervals)) {
+      return todayHours.intervals.some((interval: { open: string; close: string }) => {
+        const [openH, openM] = interval.open.split(":").map(Number);
+        const [closeH, closeM] = interval.close.split(":").map(Number);
+        return nowMinutes >= openH * 60 + openM && nowMinutes < closeH * 60 + closeM;
+      });
+    }
+
+    // Formato legado { open, close }
+    if (todayHours.open && todayHours.close) {
+      const [openH, openM] = todayHours.open.split(":").map(Number);
+      const [closeH, closeM] = todayHours.close.split(":").map(Number);
+      return nowMinutes >= openH * 60 + openM && nowMinutes < closeH * 60 + closeM;
+    }
+    return null;
   } catch { return null; }
 }
 
@@ -88,4 +104,5 @@ export interface TemplateProps {
   fmtAllCurrencies: (p: any) => { brl: string; usd: string; eur: string } | "";
   isOpen: boolean | null;
   carouselImages: string[];
+  cartEnabled: boolean;
 }

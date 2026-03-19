@@ -40,10 +40,51 @@ export function SharedItemCard({
   const name = getName(item, lang, overrides);
   const desc = getDesc(item, lang, overrides);
   const prices = fmtAllCurrencies(item.priceBrl);
+  const isWhatsappPrice = !!(item as any).priceWhatsapp;
 
-  const imageEl = item.imageUrl ? (
-    <div className="flex-shrink-0 w-[72px] h-[72px]">
-      <img src={item.imageUrl} alt={name} className="w-full h-full rounded-xl object-cover" />
+  // Monta lista de imagens para o carrossel
+  const extraImages: string[] = (() => {
+    try { return JSON.parse((item as any).imageUrls ?? "[]"); } catch { return []; }
+  })();
+  const allImages = [
+    ...(item.imageUrl ? [item.imageUrl] : []),
+    ...extraImages.filter((u: string) => u && u !== item.imageUrl),
+  ];
+
+  const [imgIdx, setImgIdx] = useState(0);
+
+  const imageEl = allImages.length > 0 ? (
+    <div className="flex-shrink-0 w-[72px] h-[72px] relative">
+      <img
+        src={allImages[imgIdx]}
+        alt={name}
+        className="w-full h-full rounded-xl object-cover"
+      />
+      {allImages.length > 1 && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i - 1 + allImages.length) % allImages.length); }}
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full text-white text-xs"
+            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          >‹</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setImgIdx((i) => (i + 1) % allImages.length); }}
+            className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full text-white text-xs"
+            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          >›</button>
+          {/* dots */}
+          <div className="absolute bottom-0.5 left-0 right-0 flex justify-center gap-0.5">
+            {allImages.map((_, i) => (
+              <span
+                key={i}
+                onClick={(e) => { e.stopPropagation(); setImgIdx(i); }}
+                className="w-1 h-1 rounded-full"
+                style={{ backgroundColor: i === imgIdx ? "#fff" : "rgba(255,255,255,0.5)" }}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   ) : null;
 
@@ -78,13 +119,21 @@ export function SharedItemCard({
           <DietaryBadges item={item} t={t} muted={muted} />
         </div>
         <div className="flex items-end justify-between mt-2">
-          {prices ? (
+          {isWhatsappPrice ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full"
+              style={{ backgroundColor: "#25d36618", border: "1px solid #25d36640" }}>
+              <MessageCircle className="w-3 h-3 flex-shrink-0" style={{ color: "#25d366" }} />
+              <span className="text-xs font-semibold" style={{ color: "#25d366" }}>
+                {(t as any).priceWhatsapp ?? "Sob consulta"}
+              </span>
+            </div>
+          ) : prices ? (
             <div>
               <p className="font-bold text-sm" style={{ color: primary }}>{prices.brl}</p>
               <p className="text-xs" style={{ color: muted }}>{prices.usd} · {prices.eur}</p>
             </div>
           ) : <span />}
-          {item.available && (
+          {item.available && !isWhatsappPrice && (
             <button
               onClick={onAdd}
               className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
@@ -230,7 +279,8 @@ export function CartDrawer({
 }
 
 // ─── Cart FAB (floating action button) ───────────────────────────────────────
-export function CartFAB({ cartCount, primary, onClick }: { cartCount: number; primary: string; onClick: () => void }) {
+export function CartFAB({ cartCount, primary, onClick, cartEnabled = true }: { cartCount: number; primary: string; onClick: () => void; cartEnabled?: boolean }) {
+  if (!cartEnabled) return null;
   return (
     <div className="fixed bottom-6 right-4 z-40">
       <button

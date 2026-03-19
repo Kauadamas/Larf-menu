@@ -44,7 +44,31 @@ const DAY_LABELS: Record<DayKey, string> = {
   fri: "Sexta", sat: "Sábado", sun: "Domingo",
 };
 const ALL_DAYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const DEFAULT_HOURS = Object.fromEntries(ALL_DAYS.map(d => [d, { open: "08:00", close: "22:00", closed: false }])) as Record<DayKey, { open: string; close: string; closed: boolean }>;
+
+// Cada dia agora suporta múltiplos intervalos de horário
+type DayInterval = { open: string; close: string };
+type DayHours = { closed: boolean; intervals: DayInterval[] };
+
+const DEFAULT_HOURS = Object.fromEntries(
+  ALL_DAYS.map(d => [d, { closed: false, intervals: [{ open: "08:00", close: "22:00" }] }])
+) as Record<DayKey, DayHours>;
+
+// Compatibilidade com formato antigo { open, close, closed }
+function parseBH(raw: any): Record<DayKey, DayHours> {
+  const result = { ...DEFAULT_HOURS };
+  if (!raw || typeof raw !== "object") return result;
+  for (const day of ALL_DAYS) {
+    const v = raw[day];
+    if (!v) continue;
+    if (Array.isArray(v.intervals)) {
+      result[day] = { closed: !!v.closed, intervals: v.intervals };
+    } else if (v.open !== undefined) {
+      // formato legado
+      result[day] = { closed: !!v.closed, intervals: [{ open: v.open ?? "08:00", close: v.close ?? "22:00" }] };
+    }
+  }
+  return result;
+}
 
 interface SettingsForm {
   name: string;
@@ -67,6 +91,7 @@ interface SettingsForm {
   paymentMercadoPago: string;
   paymentPagSeguro: string;
   paymentPicPay: string;
+  cartEnabled: boolean;
 }
 
 export default function CompanySettings() {
@@ -97,8 +122,9 @@ export default function CompanySettings() {
     paymentMercadoPago: "",
     paymentPagSeguro: "",
     paymentPicPay: "",
+    cartEnabled: true,
   });
-  const [businessHours, setBusinessHours] = useState<Record<DayKey, { open: string; close: string; closed: boolean }>>(DEFAULT_HOURS);
+  const [businessHours, setBusinessHours] = useState<Record<DayKey, DayHours>>(DEFAULT_HOURS);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [carouselImages, setCarouselImages] = useState<string[]>([]);
@@ -153,11 +179,12 @@ export default function CompanySettings() {
         paymentMercadoPago: company.paymentMercadoPago ?? "",
         paymentPagSeguro: company.paymentPagSeguro ?? "",
         paymentPicPay: company.paymentPicPay ?? "",
+        cartEnabled: (company as any).cartEnabled ?? true,
       });
       // Parse business hours
       try {
         const bh = JSON.parse((company as any).businessHours ?? "{}");
-        if (bh && typeof bh === "object") setBusinessHours({ ...DEFAULT_HOURS, ...bh });
+        if (bh && typeof bh === "object") setBusinessHours(parseBH(bh));
       } catch { setBusinessHours(DEFAULT_HOURS); }
       setMenuTemplate((company as any).menuTemplate ?? "classic");
       setLogoPreview(company.logoUrl ?? "");
@@ -651,6 +678,23 @@ export default function CompanySettings() {
               </CardContent>
             </Card>
 
+            {/* Cart Toggle */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Botão de Carrinho</CardTitle>
+                <p className="text-sm text-muted-foreground">Ative ou desative o botão de carrinho no cardápio público. Quando desativado, clientes apenas visualizam o cardápio sem poder montar pedidos.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">Carrinho habilitado</p>
+                    <p className="text-xs text-muted-foreground">Exibe o botão flutuante de carrinho no cardápio</p>
+                  </div>
+                  <Switch checked={form.cartEnabled} onCheckedChange={(v) => setForm((f) => ({ ...f, cartEnabled: v }))} />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Delivery */}
             <Card>
               <CardHeader>
@@ -684,37 +728,83 @@ export default function CompanySettings() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Horário de Funcionamento</CardTitle>
-                <p className="text-sm text-muted-foreground">Configure os horários de abertura e fechamento por dia da semana.</p>
+                <p className="text-sm text-muted-foreground">Configure os horários por dia. Você pode adicionar múltiplos intervalos (ex: 06h–12h e 14h–22h).</p>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {ALL_DAYS.map((day) => (
-                  <div key={day} className="flex items-center gap-3">
-                    <div className="w-20 text-sm font-medium text-muted-foreground">{DAY_LABELS[day]}</div>
-                    <Switch
-                      checked={!businessHours[day].closed}
-                      onCheckedChange={(v) => setBusinessHours(prev => ({ ...prev, [day]: { ...prev[day], closed: !v } }))}
-                    />
-                    {!businessHours[day].closed ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input
-                          type="time"
-                          value={businessHours[day].open}
-                          onChange={(e) => setBusinessHours(prev => ({ ...prev, [day]: { ...prev[day], open: e.target.value } }))}
-                          className="w-32 text-sm"
+              <CardContent className="space-y-4">
+                {ALL_DAYS.map((day) => {
+                  const dh = businessHours[day];
+                  return (
+                    <div key={day} className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-20 text-sm font-medium text-muted-foreground">{DAY_LABELS[day]}</div>
+                        <Switch
+                          checked={!dh.closed}
+                          onCheckedChange={(v) =>
+                            setBusinessHours(prev => ({ ...prev, [day]: { ...prev[day], closed: !v } }))
+                          }
                         />
-                        <span className="text-xs text-muted-foreground">até</span>
-                        <Input
-                          type="time"
-                          value={businessHours[day].close}
-                          onChange={(e) => setBusinessHours(prev => ({ ...prev, [day]: { ...prev[day], close: e.target.value } }))}
-                          className="w-32 text-sm"
-                        />
+                        {dh.closed && <span className="text-sm text-muted-foreground italic">Fechado</span>}
+                        {!dh.closed && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBusinessHours(prev => ({
+                                ...prev,
+                                [day]: { ...prev[day], intervals: [...prev[day].intervals, { open: "08:00", close: "22:00" }] },
+                              }))
+                            }
+                            className="ml-auto text-xs text-primary hover:underline"
+                          >
+                            + intervalo
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground italic">Fechado</span>
-                    )}
-                  </div>
-                ))}
+                      {!dh.closed && dh.intervals.map((interval, idx) => (
+                        <div key={idx} className="flex items-center gap-2 ml-24">
+                          <Input
+                            type="time"
+                            value={interval.open}
+                            onChange={(e) =>
+                              setBusinessHours(prev => {
+                                const intervals = [...prev[day].intervals];
+                                intervals[idx] = { ...intervals[idx], open: e.target.value };
+                                return { ...prev, [day]: { ...prev[day], intervals } };
+                              })
+                            }
+                            className="w-28 text-sm"
+                          />
+                          <span className="text-xs text-muted-foreground">até</span>
+                          <Input
+                            type="time"
+                            value={interval.close}
+                            onChange={(e) =>
+                              setBusinessHours(prev => {
+                                const intervals = [...prev[day].intervals];
+                                intervals[idx] = { ...intervals[idx], close: e.target.value };
+                                return { ...prev, [day]: { ...prev[day], intervals } };
+                              })
+                            }
+                            className="w-28 text-sm"
+                          />
+                          {dh.intervals.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBusinessHours(prev => ({
+                                  ...prev,
+                                  [day]: { ...prev[day], intervals: prev[day].intervals.filter((_, i) => i !== idx) },
+                                }))
+                              }
+                              className="text-xs text-red-400 hover:text-red-600"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
 

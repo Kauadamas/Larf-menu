@@ -32,7 +32,7 @@ export default function TemplateDark(props: TemplateProps) {
   const { company, lang, translationOverrides, isTranslating, handleSetLang,
     cart, cartOpen, setCartOpen, addToCart, removeFromCart, updateQty, cartCount, cartTotal,
     sendOrder, search, setSearch, filteredItems,
-    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages } = props;
+    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages, cartEnabled = true } = props;
 
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -162,7 +162,7 @@ export default function TemplateDark(props: TemplateProps) {
                           <p className="text-xs" style={{ color: muted }}>{prices.usd} · {prices.eur}</p>
                         </div>
                       ) : <span />}
-                      {item.available && (
+                      {item.available && cartEnabled && (
                         <button onClick={() => addToCart(item)}
                           className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-80"
                           style={{ backgroundColor: primary, color: "white" }}>
@@ -203,7 +203,7 @@ export default function TemplateDark(props: TemplateProps) {
                       </div>
                     )}
                   </div>
-                  {item.available && <button onClick={() => { addToCart(item); setSearchOpen(false); }} className="px-3 py-1 rounded-lg text-xs font-bold self-center" style={{ backgroundColor: primary, color: "white" }}>{t.addToCart}</button>}
+                  {item.available && cartEnabled && <button onClick={() => { addToCart(item); setSearchOpen(false); }} className="px-3 py-1 rounded-lg text-xs font-bold self-center" style={{ backgroundColor: primary, color: "white" }}>{t.addToCart}</button>}
                 </div>
               );
             })}
@@ -212,7 +212,7 @@ export default function TemplateDark(props: TemplateProps) {
       )}
 
       {/* Cart FAB */}
-      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} />
+      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} cartEnabled={cartEnabled} />
 
       {/* Cart Drawer */}
       <CartDrawer

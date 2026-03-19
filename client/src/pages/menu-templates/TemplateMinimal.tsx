@@ -6,7 +6,7 @@ export default function TemplateMinimal(props: TemplateProps) {
   const { company, lang, translationOverrides, isTranslating, handleSetLang,
     cart, cartOpen, setCartOpen, addToCart, removeFromCart, updateQty, cartCount, cartTotal,
     sendOrder, search, setSearch, filteredItems,
-    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen } = props;
+    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, cartEnabled = true } = props;
 
   const t = T[lang];
   const bg = "#ffffff";
@@ -40,7 +40,7 @@ export default function TemplateMinimal(props: TemplateProps) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {item.imageUrl && <img src={item.imageUrl} alt={name} className="w-14 h-14 rounded-lg object-cover" />}
-          {item.available && (
+          {item.available && cartEnabled && (
             <button onClick={() => addToCart(item)} className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ backgroundColor: primary }}>+</button>
           )}
         </div>
@@ -132,7 +132,7 @@ export default function TemplateMinimal(props: TemplateProps) {
       </div>
 
       {/* Cart FAB */}
-      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} />
+      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} cartEnabled={cartEnabled} />
 
       {/* Cart Drawer */}
       <CartDrawer

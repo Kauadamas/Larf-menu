@@ -64,6 +64,8 @@ export const companies = mysqlTable("companies", {
   eurRate: decimal("eurRate", { precision: 10, scale: 4 }),
   // Business hours (JSON: {mon:{open:"08:00",close:"22:00",closed:false},...})
   businessHours: text("businessHours"),
+  // Cart & ordering
+  cartEnabled: boolean("cartEnabled").default(true).notNull(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -123,6 +125,8 @@ export const menuItems = mysqlTable("menu_items", {
   isSpicy: boolean("isSpicy").default(false).notNull(),
   // Chef's recommendation
   chefRecommended: boolean("chefRecommended").default(false).notNull(),
+  // Price on WhatsApp (consult)
+  priceWhatsapp: boolean("priceWhatsapp").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -7,7 +7,7 @@ export default function TemplateStreet(props: TemplateProps) {
   const { company, lang, translationOverrides, isTranslating, handleSetLang,
     cart, cartOpen, setCartOpen, addToCart, removeFromCart, updateQty, cartCount, cartTotal,
     sendOrder, search, setSearch, filteredItems,
-    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages } = props;
+    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages, cartEnabled = true } = props;
 
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [heroIdx, setHeroIdx] = useState(0);
@@ -135,7 +135,7 @@ export default function TemplateStreet(props: TemplateProps) {
                       <p className="text-xs" style={{ color: muted }}>{prices.usd} · {prices.eur}</p>
                     </div>
                   ) : <span />}
-                  {item.available && (
+                  {item.available && cartEnabled && (
                     <button onClick={() => addToCart(item)} className="px-3 py-1.5 rounded-2xl text-xs font-black text-white shadow-sm" style={{ backgroundColor: primary }}>{t.addToCart}</button>
                   )}
                 </div>
@@ -170,7 +170,7 @@ export default function TemplateStreet(props: TemplateProps) {
                       </div>
                     )}
                   </div>
-                  {item.available && (
+                  {item.available && cartEnabled && (
                     <button onClick={() => { addToCart(item); setSearchOpen(false); }}
                       className="px-3 py-1.5 rounded-2xl text-xs font-black text-white self-center"
                       style={{ backgroundColor: primary }}>+</button>
@@ -183,7 +183,7 @@ export default function TemplateStreet(props: TemplateProps) {
       )}
 
       {/* Cart FAB */}
-      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} />
+      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} cartEnabled={cartEnabled} />
 
       {/* Cart Drawer */}
       <CartDrawer

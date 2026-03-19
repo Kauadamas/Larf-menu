@@ -45,9 +45,11 @@ interface ItemForm {
   descriptionEs: string;
   descriptionEn: string;
   priceBrl: string;
+  priceWhatsapp: boolean;
   sortOrder: number;
   imageUrl: string;
   imageKey: string;
+  imageUrls: string[];   // carrossel
   isVegetarian: boolean;
   containsGluten: boolean;
   containsLactose: boolean;
@@ -64,9 +66,11 @@ const emptyForm: ItemForm = {
   descriptionEs: "",
   descriptionEn: "",
   priceBrl: "",
+  priceWhatsapp: false,
   sortOrder: 0,
   imageUrl: "",
   imageKey: "",
+  imageUrls: [],
   isVegetarian: false,
   containsGluten: false,
   containsLactose: false,
@@ -250,6 +254,8 @@ export default function AdminMenuItems() {
       sortOrder: item.sortOrder,
       imageUrl: item.imageUrl ?? "",
       imageKey: item.imageKey ?? "",
+      imageUrls: (() => { try { return JSON.parse((item as any).imageUrls ?? "[]"); } catch { return []; } })(),
+      priceWhatsapp: (item as any).priceWhatsapp ?? false,
       isVegetarian: item.isVegetarian ?? false,
       containsGluten: item.containsGluten ?? false,
       containsLactose: item.containsLactose ?? false,
@@ -262,7 +268,12 @@ export default function AdminMenuItems() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const payload = { ...form, categoryId: parseInt(form.categoryId), companyId };
+    const payload = {
+      ...form,
+      categoryId: parseInt(form.categoryId),
+      companyId,
+      imageUrls: JSON.stringify(form.imageUrls),
+    };
     if (editId) {
       updateMutation.mutate({ id: editId, ...payload });
     } else {
@@ -547,6 +558,48 @@ export default function AdminMenuItems() {
                   </button>
                 )}
               </div>
+
+              {/* Carrossel de fotos adicionais */}
+              <div>
+                <Label className="text-sm font-medium">Fotos adicionais (carrossel)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Adicione até 4 fotos extras que aparecem no preview do item.</p>
+                <div className="flex flex-wrap gap-2">
+                  {form.imageUrls.map((url, idx) => (
+                    <div key={idx} className="relative w-16 h-16">
+                      <img src={url} alt={`foto ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-border" />
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== idx) }))}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                      >✕</button>
+                    </div>
+                  ))}
+                  {form.imageUrls.length < 4 && (
+                    <label className="w-16 h-16 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-muted/30 transition-colors">
+                      <span className="text-xl text-muted-foreground">+</span>
+                      <span className="text-xs text-muted-foreground">foto</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const base64 = (reader.result as string).split(",")[1]!;
+                            uploadImageMutation.mutate(
+                              { companyId, fileName: file.name, contentType: file.type, base64 },
+                              { onSuccess: (data) => setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, data.url] })) }
+                            );
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
               {/* Category */}
               <div>
                 <Label>Categoria *</Label>
@@ -666,13 +719,22 @@ export default function AdminMenuItems() {
                     min="0"
                     value={form.priceBrl}
                     onChange={(e) => setForm((f) => ({ ...f, priceBrl: e.target.value }))}
-                    required
-                    placeholder="0.00"
+                    disabled={form.priceWhatsapp}
+                    placeholder={form.priceWhatsapp ? "Sob consulta" : "0.00"}
                     className="mt-1.5"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    USD e EUR são calculados automaticamente
-                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="checkbox"
+                      id="priceWhatsapp"
+                      checked={form.priceWhatsapp}
+                      onChange={(e) => setForm((f) => ({ ...f, priceWhatsapp: e.target.checked, priceBrl: e.target.checked ? "0" : f.priceBrl }))}
+                      className="rounded"
+                    />
+                    <label htmlFor="priceWhatsapp" className="text-xs text-muted-foreground cursor-pointer">
+                      Preço sob consulta via WhatsApp
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="sortOrder">Ordem</Label>

@@ -7,7 +7,7 @@ export default function TemplateMagazine(props: TemplateProps) {
   const { company, lang, translationOverrides, isTranslating, handleSetLang,
     cart, cartOpen, setCartOpen, addToCart, removeFromCart, updateQty, cartCount, cartTotal,
     sendOrder, search, setSearch, filteredItems,
-    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages } = props;
+    catsWithItems, chefItems, primary, fmtAllCurrencies, isOpen, carouselImages, cartEnabled = true } = props;
 
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [heroIdx, setHeroIdx] = useState(0);
@@ -155,7 +155,7 @@ export default function TemplateMagazine(props: TemplateProps) {
                           <p className="text-xs" style={{ color: muted }}>{prices.usd}</p>
                         </div>
                       )}
-                      {item.available && <button onClick={() => addToCart(item)} className="mt-1.5 w-full py-1 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: primary }}>{t.addToCart}</button>}
+                      {item.available && cartEnabled && <button onClick={() => addToCart(item)} className="mt-1.5 w-full py-1 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: primary }}>{t.addToCart}</button>}
                     </div>
                   </div>
                 );
@@ -193,7 +193,7 @@ export default function TemplateMagazine(props: TemplateProps) {
                         <p className="text-xs" style={{ color: muted }}>{prices.usd} · {prices.eur}</p>
                       </div>
                     ) : <span />}
-                    {item.available && (
+                    {item.available && cartEnabled && (
                       <button onClick={() => addToCart(item)} className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-lg" style={{ backgroundColor: primary }}>+</button>
                     )}
                   </div>
@@ -205,7 +205,7 @@ export default function TemplateMagazine(props: TemplateProps) {
       </div>
 
       {/* Cart FAB */}
-      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} />
+      <CartFAB cartCount={cartCount} primary={primary} onClick={() => setCartOpen(true)} cartEnabled={cartEnabled} />
 
       {/* Cart Drawer */}
       <CartDrawer
