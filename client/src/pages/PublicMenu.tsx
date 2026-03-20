@@ -211,13 +211,14 @@ function DietaryBadges({ item, t, muted }: { item: any; t: typeof T["pt"]; muted
 }
 
 // ─── Item Card ────────────────────────────────────────────────────────────────
-function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCurrencies, onAdd, t, isChefRecommended, overrides, cartEnabled }: {
+function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCurrencies, onAdd, t, isChefRecommended, overrides, cartEnabled, companyWhatsapp }: {
   item: any; lang: Lang; primary: string; surface: string; border: string;
   text: string; muted: string;
   fmtAllCurrencies: (p: any) => { brl: string; usd: string; eur: string } | "";
   onAdd: () => void; t: typeof T["pt"]; isChefRecommended?: boolean;
   overrides?: Record<string, string>;
   cartEnabled?: boolean;
+  companyWhatsapp?: string;
 }) {
   const name = getName(item, lang, overrides);
   const desc = getDesc(item, lang, overrides);
@@ -259,7 +260,7 @@ function ItemCard({ item, lang, primary, surface, border, text, muted, fmtAllCur
           {item.priceWhatsapp ? (
             <div>
               <a
-                href={`https://wa.me/${(item as any)._companyWhatsapp ?? ""}`.replace(/\s/g, "")}
+                href={`https://wa.me/${(companyWhatsapp ?? "").replace(/\D/g, "")}`}
                 target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full"
                 style={{ backgroundColor: "#25d36620", color: "#128c7e" }}>
@@ -825,7 +826,8 @@ export default function PublicMenu() {
                 <ItemCard key={item.id} item={item} lang={lang} primary={primary}
                   surface={surface} border={border} text={text} muted={muted}
                   fmtAllCurrencies={fmtAllCurrencies} onAdd={() => addToCart(item)} t={t}
-                  isChefRecommended overrides={translationOverrides} cartEnabled={cartEnabled} />
+                  isChefRecommended overrides={translationOverrides} cartEnabled={cartEnabled}
+                  companyWhatsapp={company.whatsapp ?? ""} />
               ))}
             </div>
           </section>
@@ -858,7 +860,8 @@ export default function PublicMenu() {
                 <ItemCard key={item.id} item={item} lang={lang} primary={primary}
                   surface={surface} border={border} text={text} muted={muted}
                   fmtAllCurrencies={fmtAllCurrencies} onAdd={() => addToCart(item)} t={t}
-                  overrides={translationOverrides} cartEnabled={cartEnabled} />
+                  overrides={translationOverrides} cartEnabled={cartEnabled}
+                  companyWhatsapp={company.whatsapp ?? ""} />
               ))}
             </div>
           </section>
