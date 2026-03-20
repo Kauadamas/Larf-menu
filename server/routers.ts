@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { billingRouter } from "./billing/router";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import {
   addCompanyMember,
   createCategory,
@@ -59,7 +60,62 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 
 function randomSuffix() {
-  return Math.random().toString(36).slice(2, 10);
+  return crypto.randomBytes(8).toString("hex");
+}
+
+// ─── In-memory rate limiter ────────────────────────────────────────────────────
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    return true; // allowed
+  }
+  if (entry.count >= maxRequests) return false; // blocked
+  entry.count++;
+  return true;
+}
+// Clean up stale entries every 5 min to avoid memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of rateLimitStore) {
+    if (now > v.resetAt) rateLimitStore.delete(k);
+  }
+}, 5 * 60 * 1000);
+
+// ─── ALLOWED ORIGINS for password reset links ─────────────────────────────────
+const ALLOWED_RESET_ORIGINS = new Set([
+  "https://larfmenu.com.br",
+  "https://app.larfmenu.com.br",
+  "http://localhost:3000",
+  "http://localhost:5173",
+]);
+
+// ─── Sanitize HTML to prevent XSS in print template ──────────────────────────
+function escapeHtml(str: string): string {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ─── Validate image content-type ─────────────────────────────────────────────
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
+]);
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB server-side hard cap
+
+function validateImageUpload(contentType: string, base64: string) {
+  if (!ALLOWED_IMAGE_TYPES.has(contentType.toLowerCase())) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de arquivo não permitido. Use JPEG, PNG ou WebP." });
+  }
+  const bytes = Math.ceil((base64.length * 3) / 4);
+  if (bytes > MAX_IMAGE_BYTES) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo muito grande. Máximo 8MB." });
+  }
 }
 
 const superadminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -70,7 +126,7 @@ const superadminProcedure = protectedProcedure.use(({ ctx, next }) => {
 });
 
 async function assertCompanyAccess(userId: number, companyId: number, role?: string) {
-  if (role === "superadmin" || role === "admin") return;
+  if (role === "superadmin") return; // only superadmin has unrestricted access
   const member = await getCompanyMember(userId, companyId);
   if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "No access to this company" });
 }
@@ -252,8 +308,15 @@ export const appRouter = router({
         password: z.string().min(1),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Rate limit: 10 tentativas por IP por 15 minutos
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() ?? ctx.req.socket.remoteAddress ?? "unknown";
+        if (!rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas tentativas. Aguarde 15 minutos." });
+        }
         const user = await getUserByEmailWithPassword(input.email.toLowerCase().trim());
         if (!user || !user.passwordHash) {
+          // Timing attack: always run bcrypt even if user not found
+          await bcrypt.compare(input.password, "$2b$10$invalidhashinvalidhashinvalidhashxx");
           throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
         }
         const valid = await bcrypt.compare(input.password, user.passwordHash);
@@ -314,7 +377,7 @@ export const appRouter = router({
         await addCompanyMember({ companyId, userId, role: "owner" });
 
         // Gera token de verificação de e-mail (auto-ativação, sem aprovação manual)
-        const verifyToken = `ev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+        const verifyToken = `ev_${crypto.randomBytes(32).toString("hex")}`;
         const verifyExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await setEmailVerifyToken(userId, verifyToken, verifyExpiresAt);
 
@@ -391,14 +454,23 @@ export const appRouter = router({
         email: z.string().email(),
         origin: z.string().url(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Rate limit: 5 requests per IP per hour
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() ?? ctx.req.socket.remoteAddress ?? "unknown";
+        if (!rateLimit(`pwreset:${ip}`, 5, 60 * 60 * 1000)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas tentativas. Aguarde 1 hora." });
+        }
+        // Whitelist origin to prevent phishing via crafted reset links
+        const allowedOrigin = ALLOWED_RESET_ORIGINS.has(input.origin)
+          ? input.origin
+          : "https://app.larfmenu.com.br";
         const user = await getUserByEmail(input.email.toLowerCase().trim());
         // Always return success to avoid user enumeration
         if (!user || !user.email) return { success: true };
-        const token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+        const token = crypto.randomBytes(32).toString("hex");
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
         await createPasswordResetToken(user.id, token, expiresAt);
-        const resetUrl = `${input.origin}/reset-password?token=${token}`;
+        const resetUrl = `${allowedOrigin}/reset-password?token=${token}`;
         await sendPasswordResetEmail({ to: user.email, name: user.name ?? user.email, resetUrl });
         return { success: true };
       }),
@@ -425,12 +497,17 @@ export const appRouter = router({
     translatePublic: publicProcedure
       .input(z.object({
         fields: z.array(z.object({
-          key: z.string(),
-          text: z.string().min(1).max(2000),
-        })).max(200),
+          key: z.string().max(100),
+          text: z.string().min(1).max(1000),
+        })).max(50), // reduced from 200 to 50
         target: z.enum(["es", "en"]),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Rate limit: 5 translation requests per IP per minute
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() ?? ctx.req.socket.remoteAddress ?? "unknown";
+        if (!rateLimit(`translate:${ip}`, 5, 60 * 1000)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas requisições de tradução." });
+        }
         const results: Record<string, string> = {};
         for (const field of input.fields) {
           results[field.key] = await translateText(field.text, input.target);
@@ -712,13 +789,15 @@ export const appRouter = router({
     uploadLogo: protectedProcedure
       .input(z.object({
         companyId: z.number(),
-        fileName: z.string(),
+        fileName: z.string().max(255),
         contentType: z.string(),
         base64: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
-        const ext = input.fileName.split(".").pop() ?? "jpg";
+        validateImageUpload(input.contentType, input.base64);
+        const safeExt: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+        const ext = safeExt[input.contentType.toLowerCase()] ?? "jpg";
         const key = `logos/${input.companyId}/${randomSuffix()}.${ext}`;
         const buffer = Buffer.from(input.base64, "base64");
         const { url } = await storagePut(key, buffer, input.contentType);
@@ -729,13 +808,15 @@ export const appRouter = router({
     uploadCarousel: protectedProcedure
       .input(z.object({
         companyId: z.number(),
-        fileName: z.string(),
+        fileName: z.string().max(255),
         contentType: z.string(),
         base64: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
-        const ext = input.fileName.split(".").pop() ?? "jpg";
+        validateImageUpload(input.contentType, input.base64);
+        const safeExt: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+        const ext = safeExt[input.contentType.toLowerCase()] ?? "jpg";
         const key = `carousel/${input.companyId}/${randomSuffix()}.${ext}`;
         const buffer = Buffer.from(input.base64, "base64");
         const { url } = await storagePut(key, buffer, input.contentType);
@@ -966,13 +1047,15 @@ export const appRouter = router({
     uploadImage: protectedProcedure
       .input(z.object({
         companyId: z.number(),
-        fileName: z.string(),
+        fileName: z.string().max(255),
         contentType: z.string(),
         base64: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
-        const ext = input.fileName.split(".").pop() ?? "jpg";
+        validateImageUpload(input.contentType, input.base64);
+        const safeExt: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+        const ext = safeExt[input.contentType.toLowerCase()] ?? "jpg";
         const key = `menu-images/${input.companyId}/${randomSuffix()}.${ext}`;
         const buffer = Buffer.from(input.base64, "base64");
         const { url } = await storagePut(key, buffer, input.contentType);

@@ -93,7 +93,8 @@ export async function getAllUsers() {
         .from(companyMembers)
         .innerJoin(companies, eq(companyMembers.companyId, companies.id))
         .where(eq(companyMembers.userId, u.id));
-      return { ...u, companies: memberships };
+      const { passwordHash, emailVerifyToken, emailVerifyExpiresAt, ...safeUser } = u as any;
+      return { ...safeUser, companies: memberships };
     })
   );
   return usersWithCompanies;

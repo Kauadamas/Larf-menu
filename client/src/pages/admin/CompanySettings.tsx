@@ -324,6 +324,14 @@ export default function CompanySettings() {
 
   // Print function
   function handlePrint() {
+    // Sanitize all dynamic strings inserted into the HTML template
+    const esc = (s: any) => String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
     const r = printRates as Record<string, number>;
     const fmtPrice = (brl: string | number | null | undefined): string => {
       if (!brl) return "";
@@ -358,7 +366,7 @@ export default function CompanySettings() {
       : catsWithItems;
     const langLabel = printLang === "pt" ? "Cardápio" : printLang === "es" ? "Menú" : "Menu";
     const currencyLabel = printCurrency === "BRL" ? "Preços em Real (BRL)" : printCurrency === "USD" ? "Prices in Dollar (USD)" : "Preise in Euro (EUR)";
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${company?.name ?? langLabel}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(company?.name ?? langLabel)}</title>
     <style>
       @media print { body { margin: 0; } }
       body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
@@ -373,10 +381,10 @@ export default function CompanySettings() {
       .item-desc { font-size: 11px; color: #666; margin-top: 2px; }
       .item-price { font-weight: bold; color: ${form.colorTheme}; white-space: nowrap; font-size: 14px; }
     </style></head><body>
-    <h1>${company?.name ?? ""}</h1>
-    ${company?.address ? `<div class="subtitle">${company.address}</div>` : ""}
-    <div class="currency-info">${currencyLabel}</div>
-    ${selectedCats.map((c: any) => `<div class="cat-block"><h2>${getCatName(c)}</h2>${c.items.map((i: any) => `<div class="item"><div><div class="item-name">${getName(i)}</div><div class="item-desc">${getDesc(i)}</div></div><div class="item-price">${fmtPrice(i.priceBrl)}</div></div>`).join("")}</div>`).join("")}
+    <h1>${esc(company?.name)}</h1>
+    ${company?.address ? `<div class="subtitle">${esc(company.address)}</div>` : ""}
+    <div class="currency-info">${esc(currencyLabel)}</div>
+    ${selectedCats.map((c: any) => `<div class="cat-block"><h2>${esc(getCatName(c))}</h2>${c.items.map((i: any) => `<div class="item"><div><div class="item-name">${esc(getName(i))}</div><div class="item-desc">${esc(getDesc(i))}</div></div><div class="item-price">${esc(fmtPrice(i.priceBrl))}</div></div>`).join("")}</div>`).join("")}
     </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); w.print(); }

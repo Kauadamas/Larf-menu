@@ -9,3 +9,7 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
 };
+
+if (!ENV.cookieSecret) {
+  throw new Error("FATAL: JWT_SECRET env var não configurado. O servidor não pode subir sem ele.");
+}
