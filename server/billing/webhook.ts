@@ -10,7 +10,7 @@ billingWebhook.post(
   express.raw({ type: "application/json" }),
   async (req, res) => {
     const token = req.headers["asaas-access-token"];
-    if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) {
+    if (!process.env.ASAAS_WEBHOOK_TOKEN || token !== process.env.ASAAS_WEBHOOK_TOKEN) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 

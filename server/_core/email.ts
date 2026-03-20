@@ -162,3 +162,56 @@ export async function sendVerificationEmail({
   });
   if (error) throw new Error(`Resend error: ${error.message}`);
 }
+
+export async function sendMemberInviteEmail({
+  to,
+  name,
+  companyName,
+  invitedByName,
+  setPasswordUrl,
+}: {
+  to: string;
+  name: string;
+  companyName: string;
+  invitedByName: string;
+  setPasswordUrl: string;
+}) {
+  const { error } = await getResend().emails.send({
+    from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    to,
+    subject: `Você foi convidado para gerenciar ${companyName} no Larf Menu`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #fff;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <span style="font-size: 24px; font-weight: 700; color: #c0392b;">Larf Menu</span>
+        </div>
+        <h2 style="font-size: 20px; font-weight: 600; color: #111; margin-bottom: 8px;">Você foi convidado! 🎉</h2>
+        <p style="color: #555; line-height: 1.6; margin-bottom: 8px;">
+          Olá, <strong>${name}</strong>!
+        </p>
+        <p style="color: #555; line-height: 1.6; margin-bottom: 8px;">
+          <strong>${invitedByName}</strong> convidou você para gerenciar o cardápio digital do restaurante
+          <strong>${companyName}</strong> no Larf Menu.
+        </p>
+        <p style="color: #555; line-height: 1.6; margin-bottom: 24px;">
+          Para acessar o painel, clique no botão abaixo e defina sua senha:
+        </p>
+        <div style="text-align: center; margin-bottom: 32px;">
+          <a href="${setPasswordUrl}" style="display: inline-block; background: #c0392b; color: #fff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+            Definir senha e acessar
+          </a>
+        </div>
+        <p style="color: #888; font-size: 13px; line-height: 1.6;">
+          Este link é válido por <strong>48 horas</strong>. Após definir a senha, acesse sempre em
+          <a href="https://larfmenu.com.br/login" style="color: #c0392b;">larfmenu.com.br/login</a>.
+        </p>
+        <p style="color: #aaa; font-size: 12px; line-height: 1.6; margin-top: 8px;">
+          Se você não esperava este convite, pode ignorar este e-mail com segurança.
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #bbb; font-size: 12px; text-align: center;">Larf Menu — Cardápio Digital para Restaurantes</p>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+}

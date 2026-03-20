@@ -68,9 +68,9 @@ export default function CompanyMembers() {
       setSearchEmail("");
       setNewMemberName("");
       if (data.created) {
-        toast.success("Usuário criado e adicionado à empresa!");
+        toast.success("Membro adicionado! Um e-mail com o link para definir a senha foi enviado para ele.");
       } else {
-        toast.success("Membro adicionado!");
+        toast.success("Membro adicionado! O usuário já possui conta e pode acessar normalmente.");
       }
     },
     onError: (e) => toast.error(e.message),

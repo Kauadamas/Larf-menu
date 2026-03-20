@@ -9,6 +9,7 @@ import {
   createCompany,
   createMenuItem,
   createReview,
+  getReviewById,
   deleteCategory,
   deleteCompany,
   deleteMenuItem,
@@ -50,7 +51,7 @@ import {
   getUserByEmailVerifyToken,
   markEmailVerified,
 } from "./db";
-import { sendPasswordResetEmail, sendWelcomeEmail, sendApprovalEmail, sendVerificationEmail } from "./_core/email";
+import { sendPasswordResetEmail, sendWelcomeEmail, sendApprovalEmail, sendVerificationEmail, sendMemberInviteEmail } from "./_core/email";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -355,6 +356,11 @@ export const appRouter = router({
         restaurantSlug: z.string().min(2).regex(/^[a-z0-9-]+$/, "Slug inválido — use apenas letras minúsculas, números e hífens"),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Rate limit: 5 registros por IP por hora
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() ?? ctx.req.socket.remoteAddress ?? "unknown";
+        if (!rateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas tentativas de cadastro. Aguarde 1 hora." });
+        }
         const existing = await getUserByEmail(input.email.toLowerCase().trim());
         if (existing) {
           throw new TRPCError({ code: "CONFLICT", message: "Este e-mail já está cadastrado." });
@@ -608,15 +614,18 @@ export const appRouter = router({
     getById: superadminProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return getUserById(input.id);
+        const u = await getUserById(input.id);
+        if (!u) return null;
+        const { passwordHash, emailVerifyToken, emailVerifyExpiresAt, ...safe } = u as any;
+        return safe;
       }),
 
     pending: superadminProcedure.query(async () => {
       const pending = await getPendingUsers();
-      // Incluir restaurantes de cada usuário pendente
       const result = await Promise.all(pending.map(async (u) => {
         const memberships = await getUserCompanies(u.id);
-        return { ...u, companies: memberships.map(m => m.company) };
+        const { passwordHash, emailVerifyToken, emailVerifyExpiresAt, ...safe } = u as any;
+        return { ...safe, companies: memberships.map(m => m.company) };
       }));
       return result;
     }),
@@ -671,16 +680,16 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const id = await createUserManually({ name: input.name, email: input.email, role: input.role });
-        // Send welcome e-mail with set-password link if origin is provided
         if (input.origin) {
           try {
-            const token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+            const token = crypto.randomBytes(32).toString("hex");
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
             await createPasswordResetToken(id, token, expiresAt);
-            const setPasswordUrl = `${input.origin}/reset-password?token=${token}`;
+            const allowedOrigin = ALLOWED_RESET_ORIGINS.has(input.origin) ? input.origin : "https://app.larfmenu.com.br";
+            const setPasswordUrl = `${allowedOrigin}/reset-password?token=${token}`;
             await sendWelcomeEmail({ to: input.email, name: input.name, setPasswordUrl, companyName: input.companyName });
           } catch (err) {
-            console.warn("[Welcome email] Failed to send:", err);
+            console.error("[Welcome email] Failed to send:", err);
           }
         }
         return { id };
@@ -692,7 +701,7 @@ export const appRouter = router({
     list: superadminProcedure.query(async () => getAllCompanies()),
 
     myCompanies: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role === "superadmin" || ctx.user.role === "admin") return getAllCompanies();
+      if (ctx.user.role === "superadmin") return getAllCompanies(); // only superadmin sees all
       const result = await getUserCompanies(ctx.user.id);
       return result.map((r) => r.company);
     }),
@@ -725,7 +734,7 @@ export const appRouter = router({
         instagram: z.string().optional(),
         whatsapp: z.string().optional(),
         customDomain: z.string().optional(),
-        colorTheme: z.string().max(30).optional(),
+        colorTheme: z.string().max(30).regex(/^#[0-9a-fA-F]{3,8}$|^rgb\(/).optional(),
         googleReviewsUrl: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -748,7 +757,7 @@ export const appRouter = router({
         customDomain: z.string().optional(),
         logoUrl: z.string().optional(),
         logoKey: z.string().optional(),
-        colorTheme: z.string().max(30).optional(),
+        colorTheme: z.string().max(30).regex(/^#[0-9a-fA-F]{3,8}$|^rgb\(/).optional(),
         googleReviewsUrl: z.string().optional(),
         carouselImages: z.string().optional(), // JSON array of URLs
         businessHours: z.string().optional(), // JSON object with hours per day
@@ -767,6 +776,13 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.id, ctx.user.role);
         const { id, ...rawData } = input;
+        // Check slug uniqueness if slug is being updated
+        if (rawData.slug) {
+          const existing = await getCompanyBySlug(rawData.slug);
+          if (existing && existing.id !== id) {
+            throw new TRPCError({ code: "CONFLICT", message: "Este slug já está em uso por outro restaurante." });
+          }
+        }
         // Filter undefined AND empty strings for nullable URL fields to avoid MySQL errors
         const nullableFields = ["facebook","instagram","website","whatsapp","customDomain","googleReviewsUrl","deliveryFee","deliveryMinOrder","paymentMercadoPago","paymentPagSeguro","paymentPicPay","address","phone","description","carouselImages","usdRate","eurRate"];
         const data = Object.fromEntries(
@@ -858,7 +874,8 @@ export const appRouter = router({
         userId: z.number(),
         role: z.enum(["owner", "manager"]),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
         await updateCompanyMemberRole(input.userId, input.companyId, input.role);
         return { success: true };
       }),
@@ -880,16 +897,44 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
-        // Check if user already exists with this email
+
+        const company = await getCompanyById(input.companyId);
+        const companyName = company?.name ?? "seu restaurante";
+        const invitedByName = ctx.user.name ?? ctx.user.email ?? "O administrador";
+
         let existingUser = await getUserByEmail(input.email);
         let userId: number;
+        const isNew = !existingUser;
+
         if (existingUser) {
           userId = existingUser.id;
         } else {
           userId = await createUserManually({ name: input.name, email: input.email, role: "user" });
         }
+
         await addCompanyMember({ companyId: input.companyId, userId, role: input.role });
-        return { success: true, created: !existingUser };
+
+        // Se é usuário novo, envia e-mail de convite com link para definir senha
+        if (isNew) {
+          try {
+            const token = crypto.randomBytes(32).toString("hex");
+            const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 horas
+            await createPasswordResetToken(userId, token, expiresAt);
+            const setPasswordUrl = `https://app.larfmenu.com.br/reset-password?token=${token}`;
+            await sendMemberInviteEmail({
+              to: input.email,
+              name: input.name,
+              companyName,
+              invitedByName: String(invitedByName),
+              setPasswordUrl,
+            });
+          } catch (err) {
+            console.error("[createAndAddMember] Falha ao enviar e-mail de convite:", err);
+            // Não falha a operação — membro foi adicionado, só o e-mail falhou
+          }
+        }
+
+        return { success: true, created: isNew };
       }),
   }),
 
@@ -973,7 +1018,7 @@ export const appRouter = router({
         descriptionPt: z.string().optional(),
         descriptionEs: z.string().optional(),
         descriptionEn: z.string().optional(),
-        priceBrl: z.string(),
+        priceBrl: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço inválido"),
         imageUrl: z.string().optional(),
         imageKey: z.string().optional(),
         imageUrls: z.string().optional(),       // JSON array de URLs para carrossel
@@ -1002,7 +1047,7 @@ export const appRouter = router({
         descriptionPt: z.string().optional(),
         descriptionEs: z.string().optional(),
         descriptionEn: z.string().optional(),
-        priceBrl: z.string().optional(),
+        priceBrl: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço inválido").optional(),
         imageUrl: z.string().optional(),
         imageKey: z.string().optional(),
         imageUrls: z.string().optional(),
@@ -1133,6 +1178,10 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), companyId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
+        const review = await getReviewById(input.id);
+        if (!review || review.companyId !== input.companyId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Avaliação não encontrada." });
+        }
         await deleteReview(input.id);
         return { success: true };
       }),
@@ -1148,20 +1197,31 @@ export const appRouter = router({
     analyze: protectedProcedure
       .input(z.object({
         companyId: z.number(),
-        fileName: z.string(),
-        contentType: z.string(), // image/* or application/pdf
+        fileName: z.string().max(255),
+        contentType: z.string(),
         base64: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCompanyAccess(ctx.user.id, input.companyId, ctx.user.role);
 
-        // Upload the file to S3 so the LLM can access it via URL
-        const ext = input.fileName.split(".").pop() ?? "pdf";
+        // Validate content type and size
+        const ALLOWED_IMPORT_TYPES = new Set(["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"]);
+        if (!ALLOWED_IMPORT_TYPES.has(input.contentType.toLowerCase())) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de arquivo não suportado. Use PDF, JPEG, PNG ou WebP." });
+        }
+        const MAX_IMPORT_BYTES = 20 * 1024 * 1024; // 20MB for PDFs
+        const approxBytes = Math.ceil((input.base64.length * 3) / 4);
+        if (approxBytes > MAX_IMPORT_BYTES) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo muito grande. Máximo 20MB." });
+        }
+
+        const isPdf = input.contentType === "application/pdf";
+        const safeExt: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp" };
+        const ext = safeExt[input.contentType.toLowerCase()] ?? "pdf";
         const key = `imports/${input.companyId}/${randomSuffix()}.${ext}`;
         const buffer = Buffer.from(input.base64, "base64");
         const { url: fileUrl } = await storagePut(key, buffer, input.contentType);
 
-        const isPdf = input.contentType === "application/pdf";
         const { invokeLLM } = await import("./_core/llm");
 
         const systemPrompt = `You are a restaurant menu extraction assistant.

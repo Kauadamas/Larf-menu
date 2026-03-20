@@ -137,16 +137,21 @@ export async function getCompanyById(id: number): Promise<Company | undefined> {
 export async function getCompanyBySlug(slug: string): Promise<Company | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(companies).where(eq(companies.slug, slug)).limit(1);
+  const result = await db.select().from(companies).where(
+    and(eq(companies.slug, slug), eq(companies.active, true))
+  ).limit(1);
   return result[0];
 }
 export async function getCompanyBySubdomain(subdomain: string): Promise<Company | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  // Tenta primeiro por customDomain, depois por slug
-  const byDomain = await db.select().from(companies).where(eq(companies.customDomain, subdomain)).limit(1);
+  const byDomain = await db.select().from(companies).where(
+    and(eq(companies.customDomain, subdomain), eq(companies.active, true))
+  ).limit(1);
   if (byDomain[0]) return byDomain[0];
-  const bySlug = await db.select().from(companies).where(eq(companies.slug, subdomain)).limit(1);
+  const bySlug = await db.select().from(companies).where(
+    and(eq(companies.slug, subdomain), eq(companies.active, true))
+  ).limit(1);
   return bySlug[0];
 }
 
@@ -341,6 +346,13 @@ export async function createReview(data: InsertReview): Promise<number> {
   if (!db) throw new Error("DB not available");
   const result = await db.insert(reviews).values(data);
   return Number((result[0] as { insertId: number }).insertId);
+}
+
+export async function getReviewById(id: number): Promise<Review | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(reviews).where(eq(reviews.id, id)).limit(1);
+  return result[0];
 }
 
 export async function deleteReview(id: number): Promise<void> {
