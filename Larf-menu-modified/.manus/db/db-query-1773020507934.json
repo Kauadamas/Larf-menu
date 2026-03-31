@@ -1,0 +1,35 @@
+{
+  "query": "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_NAME = 'menu_items' AND COLUMN_NAME IN ('isVegetarian', 'containsGluten', 'containsLactose', 'isSpicy', 'chefRecommended');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 39YPv2ppfwHpYEt.9d4122669425 --database M5GhaQWP8oLQTBVp3qvgev --execute SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_NAME = 'menu_items' AND COLUMN_NAME IN ('isVegetarian', 'containsGluten', 'containsLactose', 'isSpicy', 'chefRecommended');",
+  "rows": [
+    {
+      "COLUMN_NAME": "isVegetarian",
+      "DATA_TYPE": "tinyint",
+      "COLUMN_DEFAULT": "0"
+    },
+    {
+      "COLUMN_NAME": "containsGluten",
+      "DATA_TYPE": "tinyint",
+      "COLUMN_DEFAULT": "0"
+    },
+    {
+      "COLUMN_NAME": "containsLactose",
+      "DATA_TYPE": "tinyint",
+      "COLUMN_DEFAULT": "0"
+    },
+    {
+      "COLUMN_NAME": "isSpicy",
+      "DATA_TYPE": "tinyint",
+      "COLUMN_DEFAULT": "0"
+    },
+    {
+      "COLUMN_NAME": "chefRecommended",
+      "DATA_TYPE": "tinyint",
+      "COLUMN_DEFAULT": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\tCOLUMN_DEFAULT\nisVegetarian\ttinyint\t0\ncontainsGluten\ttinyint\t0\ncontainsLactose\ttinyint\t0\nisSpicy\ttinyint\t0\nchefRecommended\ttinyint\t0\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

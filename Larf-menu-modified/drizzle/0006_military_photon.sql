@@ -1,0 +1,1 @@
+ALTER TABLE `companies` ADD `menuTemplate` varchar(20) DEFAULT 'classic' NOT NULL;

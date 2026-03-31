@@ -1,0 +1,18 @@
+{
+  "query": "SHOW COLUMNS FROM companies LIKE 'colorTheme'; SHOW COLUMNS FROM companies LIKE 'googleReviews%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 39YPv2ppfwHpYEt.9d4122669425 --database M5GhaQWP8oLQTBVp3qvgev --execute SHOW COLUMNS FROM companies LIKE 'colorTheme'; SHOW COLUMNS FROM companies LIKE 'googleReviews%';",
+  "rows": [
+    {
+      "Field": "colorTheme",
+      "Type": "enum('orange','green','blue','purple','red')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "orange",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\ncolorTheme\tenum('orange','green','blue','purple','red')\tNO\t\torange\t\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}
